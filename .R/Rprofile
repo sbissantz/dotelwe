@@ -1,0 +1,79 @@
+# Welcome message
+.First <- function() {
+  # Print a welcome message
+  #message("Hi, ", Sys.getenv("USER"),"!\n","working at:", getwd())
+  cat("\n\033[1mHi, ", Sys.getenv("USER"), "!\033[0m", " We're working in: ",
+      getwd(), "\n\n", sep = "")
+}
+
+# Set the CRAN mirror
+local({
+  r = getOption("repos")
+  r["CRAN"] = "https://ftp.fau.de/cran/"
+  options(repos = r)
+})
+
+# Store "sectets".
+# If not already created, create a file in the home directory called
+# `.R/.Renviron_private` This file is not tracked by git, so it can contain
+# sensitive information like API keys. It is sourced at the end of this file.
+# E.g. add GITHUB_PAT=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# As long as you run R as your user, R will still be able to read .Rprivate.
+#--- Important---
+# Don't forget: chmod 600 ~/.R/Rsecrets
+# Make sure you own the file: chown $(whoami) ~/.R/Rsecrets
+# Note: chown doesn’t print anything when it succeeds.
+# Verify ownership with: ls -l ~/.R | grep Rsecrets
+# If you want to remove it from being tracked:
+# dotfiles status        # should still show it
+# dotfiles clean -nd     # preview what will be removed
+# dotfiles clean -fd     # actually remove untracked ignored files from Git’
+# After this, .R/Rsecret won’t appear in git status anymore, and it won’t be
+# pushed.
+private_path <- file.path(Sys.getenv("HOME"), ".R/Rsecrets")
+if (file.exists(private_path)) {
+  readRenviron(private_path)
+} else {
+  cat("It seems that the file '", private_path, "' does not exist.\n",
+          "Please create it to store sensitive information.\n", sep = "")
+}
+
+# Warn on partial matches
+options(warnPartialMatchAttr = TRUE,
+        warnPartialMatchDollar = TRUE,
+        warnPartialMatchArgs = TRUE)
+
+# Fancy quotes are annoying and lead to
+# 'copy + paste' bugs / frustrations
+#
+options(useFancyQuotes = FALSE)
+
+# 'neovim' as editor of choice | edit()
+#
+options(editor="nvim")
+
+# Custom prompt
+#
+options(prompt = "R> ", continue = "  ")
+
+# Autocompletions for package names in
+# `require()`, `library()`
+#
+utils::rc.settings(ipck = TRUE)
+
+# Warnings are errors
+# options(warn = 2)
+
+# Get some 'nuggets of truth'
+#
+#if(interactive())
+  #try(suppressWarnings(fortunes::fortune()), silent = TRUE)
+
+### Make sure the fortunes package is installed
+.Last = function() {
+  #cond = suppressWarnings(!require(fortunes, quietly = TRUE))
+  #if(cond)
+    #try(install.packages("fortunes"), silent = TRUE)
+  #message("Bye,bye!\n", date(), "\n")
+  message("\nBye, ", Sys.getenv("USER"), "!\n")
+}

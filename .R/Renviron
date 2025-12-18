@@ -1,0 +1,7 @@
+R_USER=${HOME}
+R_PROFILE_USER=${R_USER}/.R/Rprofile
+R_ENVIRON_USER=${R_USER}/.R/.Renviron
+# Specifiers "%v" and "%p" to host multiple R versions
+# See: /setups/R-setup (.Renviron)
+# R_LIBS_USER=${R_USER}/Rlibs/%v
+R_HISTFILE=${R_USER}/.R/Rhistory
