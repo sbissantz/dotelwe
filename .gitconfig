@@ -1,0 +1,32 @@
+[user]
+	name = Steven Marcel Bißantz
+	email = steven.bissantz@rptu.de
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[color]
+	ui = true
+[core]
+	editior = nvim
+	abbrev = 8
+	editor = nvim
+[credential]
+	helper = cache
+[format]
+	; pretty = oneline
+[alias]
+	logical = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+	last = log -1 HEAD
+	unstage = restore --staged
+	unmodify = restore 
+	untrack = rm --cached 
+	visual = !gitk	
+	vivid = !git gui	
+[help]
+	autocorrect = 20
+[log]
+	abbrevcommit = yes
+[push]
+	default = simple
