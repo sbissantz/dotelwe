@@ -68,7 +68,3 @@ compinit
 # --------------------------------------------------
 # environment paths
 # --------------------------------------------------
-
-export PATH="/usr/local/opt/openssl@3/bin:$PATH"
-export PATH="/usr/local/opt/llvm/bin:$PATH"
-export PATH="/usr/local/opt/openjdk/bin:$PATH"
