@@ -58,6 +58,32 @@ autoload -Uz compinit
 compinit
 
 # --------------------------------------------------
+# persistent ssh agent (session-wide)
+# --------------------------------------------------
+# ensures exactly one ssh-agent per login session
+# agent environment is reused across shells
+
+SSH_AGENT_ENV="$HOME/.ssh/agent.env"
+
+# load existing agent environment if present
+if [ -f "$SSH_AGENT_ENV" ]; then
+    . "$SSH_AGENT_ENV" >/dev/null
+fi
+
+# start a new agent if none is usable
+if [ -z "$SSH_AUTH_SOCK" ] || ! ssh-add -l >/dev/null 2>&1; then
+    eval "$(ssh-agent -s)" >/dev/null
+    echo "export SSH_AUTH_SOCK=$SSH_AUTH_SOCK" > "$SSH_AGENT_ENV"
+    echo "export SSH_AGENT_PID=$SSH_AGENT_PID" >> "$SSH_AGENT_ENV"
+    chmod 600 "$SSH_AGENT_ENV"
+fi
+
+# add github key if not already loaded
+ssh-add -l | grep -q id_ed25519 2>/dev/null || \
+    ssh-add "$HOME/.ssh/id_ed25519"
+
+
+# --------------------------------------------------
 # user aliases, functions, completions, paths
 # --------------------------------------------------
 
