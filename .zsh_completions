@@ -1,0 +1,19 @@
+# --------------------------------------------------
+# ~/.zsh_completions
+# --------------------------------------------------
+# zsh custom completions
+# note: requires compinit to be loaded first ~/.zsh_completions
+
+_elwe() {
+    local -a commands
+    commands=(
+        'hi:ssh into elwe'
+        'push:push local incoming to elwe'
+        'pull:pull outgoing from elwe'
+        'sync:push + pull'
+    )
+
+    _describe 'command' commands
+}
+
+compdef _elwe elwe

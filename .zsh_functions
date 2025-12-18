@@ -1,0 +1,26 @@
+# --------------------------------------------------
+# ~/.zsh_functions
+# --------------------------------------------------
+# zsh user functions 
+
+elwe() {
+    case "$1" in
+        hi)
+            ssh elwetritsch
+            ;;
+        push)
+            rsync -av --progress ~/elwe/incoming/ elwetritsch:~/incoming/
+            ;;
+        pull)
+            rsync -av --progress elwetritsch:~/outgoing/ ~/elwe/outgoing/
+            ;;
+        sync)
+            elwe push
+            elwe pull
+            ;;
+        *)
+            echo "usage: elwe {hi|push|pull|sync}"
+            ;;
+    esac
+}
+
