@@ -1,6 +1,6 @@
 [user]
 	name = Steven Marcel Bißantz
-	email = steven.bissantz@rptu.de
+	email = steven.bissantz@gmail.com
 [filter "lfs"]
 	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f
