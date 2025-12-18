@@ -9,6 +9,16 @@
 # this ensures aliases, paths, and environment are loaded
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
 
+# On many HPC clusters, R is started with user startup files disabled
+# (--no-environ), so ~/.Renviron and ~/.Rprofile are ignored unless
+# R_ENVIRON_USER and R_PROFILE_USER are set *before* R starts.
+
+# Path to the user's R environment file
+export R_ENVIRON_USER="$HOME/.R/.Renviron"
+
+# Path to the user's R profile file
+export R_PROFILE_USER="$HOME/.R/Rprofile"
+
 # --------------------------------------------------
 # switch to zsh for interactive use
 # --------------------------------------------------
