@@ -1,20 +1,38 @@
-########################################################################
+# --------------------------------------------------
 # ~/.profile
-#
-# This file is read by *login shells*.
-# It is traditionally used by sh/bash and sometimes by batch systems.
-#
-# Purpose here:
-# On many HPC clusters, R is started with user startup files disabled
-# (--no-environ), so ~/.Renviron and ~/.Rprofile are ignored unless
-# R_ENVIRON_USER and R_PROFILE_USER are set *before* R starts.
-#
-# These environment variables tell R where to find the user's
-# startup files and must be exported in the shell environment.
-#########################################################################
+# --------------------------------------------------
+# login shell initialization file. this file is read by login shells (sh, bash,
+# zsh -l) and sometimes by batch systems on clusters.
 
-# Path to the user's R environment file
+# --------------------------------------------------
+# locale 
+# --------------------------------------------------
+# use the portable C locale to avoid missing-locale warnings
+# on minimal or hpc systems
+export LANG=C
+export LC_ALL=C
+
+# --------------------------------------------------
+# shell
+# --------------------------------------------------
+# define zsh as the preferred interactive shell
+# clusters often restrict chsh, so we exec zsh manually
+#
+# this replaces the current shell with zsh (no subshell)
+# the -l flag starts zsh as a login shell
+# the guard prevents infinite recursion
+export SHELL="$(command -v zsh)"
+[ -z "$ZSH_VERSION" ] && exec "$SHELL" -l
+
+# --------------------------------------------------
+# r environment configuration
+# --------------------------------------------------
+# keep r configuration files out of $HOME clutter
+# and define their locations explicitly. 
+
+# path to the user's r environment file
 export R_ENVIRON_USER="$HOME/.R/.Renviron"
 
-# Path to the user's R profile file
+# path to the user's r profile file
 export R_PROFILE_USER="$HOME/.R/Rprofile"
+
