@@ -25,6 +25,8 @@ setopt share_history
 
 # use emacs-style line editing with sane defaults
 bindkey -e
+# use vi-style line editing with sane defaults
+# bindkey -v
 
 # --------------------------------------------------
 # prompt
@@ -92,5 +94,17 @@ ssh-add -l | grep -q id_ed25519 2>/dev/null || \
 [ -f ~/.zsh_completions ] && source ~/.zsh_completions
 
 # --------------------------------------------------
-# environment paths
+# rest goes here
 # --------------------------------------------------
+#
+# ...
+#
+# --------------------------------------------------
+# tmux auto-attach for interactive sessions
+# --------------------------------------------------
+# attach to existing tmux session or create one
+# only for interactive shells and only if not already in tmux
+
+if [[ -o interactive ]] && [[ -z "$TMUX" ]]; then
+    tmux attach -t elwe || tmux new -s elwe
+fi
