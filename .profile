@@ -1,38 +1,30 @@
 # --------------------------------------------------
 # ~/.profile
 # --------------------------------------------------
-# login shell initialization file. this file is read by login shells (sh, bash,
-# zsh -l) and sometimes by batch systems on clusters.
+# login shell initialization file
+# read by login shells (sh, bash, zsh -l) and sometimes by batch systems
 
 # --------------------------------------------------
-# locale 
+# locale
 # --------------------------------------------------
-# use the portable C locale to avoid missing-locale warnings
-# on minimal or hpc systems
-export LANG=C
-export LC_ALL=C
+# use a safe default locale only if none is set
+: "${LANG:=C}"
+: "${LC_ALL:=C}"
+export LANG LC_ALL
 
 # --------------------------------------------------
-# shell
+# preferred interactive shell
 # --------------------------------------------------
-# define zsh as the preferred interactive shell
-# clusters often restrict chsh, so we exec zsh manually
-#
-# this replaces the current shell with zsh (no subshell)
-# the -l flag starts zsh as a login shell
-# the guard prevents infinite recursion
-export SHELL="$(command -v zsh)"
-[ -z "$ZSH_VERSION" ] && exec "$SHELL" -l
+# exec zsh if available and not already running
+# avoids subshells and infinite recursion
+if [ -z "$ZSH_VERSION" ] && command -v zsh >/dev/null 2>&1; then
+    exec zsh -l
+fi
 
 # --------------------------------------------------
 # r environment configuration
 # --------------------------------------------------
-# keep r configuration files out of $HOME clutter
-# and define their locations explicitly. 
+# centralize r configuration files
 
-# path to the user's r environment file
 export R_ENVIRON_USER="$HOME/.R/.Renviron"
-
-# path to the user's r profile file
 export R_PROFILE_USER="$HOME/.R/Rprofile"
-
