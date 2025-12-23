@@ -57,6 +57,28 @@ vim.opt.wildmode = { "longest", "list" }   -- bash-like tab completions
 vim.opt.showmatch = true                     -- highlight matching brackets
 -- vim.opt.compatible = false                -- unnecessary in Neovim; always off
 
+-- osc52 clipboard fallback for neovim 0.8
+
+local function osc52_copy(lines)
+  local text = table.concat(lines, "\n")
+  local encoded = vim.fn.system(
+    "printf %s " .. vim.fn.shellescape(text) .. " | base64 | tr -d '\n'"
+  )
+  local osc52 = string.format("\027]52;c;%s\007", encoded)
+  vim.api.nvim_chan_send(vim.v.stderr, osc52)
+end
+
+vim.g.clipboard = {
+  name = "osc52",
+  copy = {
+    ["+"] = osc52_copy,
+    ["*"] = osc52_copy,
+  },
+  paste = {
+    ["+"] = function() return {} end,
+    ["*"] = function() return {} end,
+  },
+}
 
 -- Setup lazy.nvim
 require("lazy").setup({
@@ -165,10 +187,12 @@ require("lazy").setup({
     },
     -- R syntax highlighting
     { "nvim-treesitter/nvim-treesitter",
-    run = ":TSUpdate",
+    version = "v0.9.2",      -- pin to a version compatible with nvim 0.8
+    build = ":TSUpdate",     -- lazy.nvim uses 'build', not 'run'
     config = function ()
         require("nvim-treesitter.configs").setup({
-            ensure_installed = { "markdown", "markdown_inline", "r", "rnoweb", "yaml", "latex", "csv" },
+            ensure_installed = { "markdown", "markdown_inline", "r", "rnoweb",
+            "yaml", "latex", "csv" },
             highlight = { enable = true },
         })
     end
