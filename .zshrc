@@ -24,6 +24,7 @@ histsize=2000
 savehist=1000
 
 setopt complete_in_word
+setopt complete_aliases
 setopt hist_ignore_dups
 setopt hist_reduce_blanks
 setopt share_history
@@ -52,17 +53,17 @@ if [[ -n "$TERM_PROGRAM" ]] && [[ -r "/etc/zshrc_$TERM_PROGRAM" ]]; then
 fi
 
 # --------------------------------------------------
-# dotfile management (bare git repo)
-# --------------------------------------------------
-
-alias dotfiles='/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME'
-
-# --------------------------------------------------
 # completion system
 # --------------------------------------------------
 
 autoload -Uz compinit
 compinit
+
+# --------------------------------------------------
+# dotfile management (bare git repo)
+# --------------------------------------------------
+
+alias dotfiles='/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME'
 
 # --------------------------------------------------
 # persistent ssh agent (session-wide)
