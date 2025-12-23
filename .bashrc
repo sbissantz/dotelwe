@@ -2,15 +2,18 @@
 # ~/.bashrc
 # --------------------------------------------------
 # bash initialization file for interactive shells
-# this file is sourced for non-login interactive shells
-# login shells source ~/.bash_profile, which in turn
-# should source this file
+# non-login interactive shells source this file
+# login shells should source ~/.bash_profile
+
+# --------------------------------------------------
+# interactive shell guard
+# --------------------------------------------------
+[[ $- != *i* ]] && return
 
 # --------------------------------------------------
 # system-wide configuration
 # --------------------------------------------------
 # source global bash definitions if provided by the system
-# this may define default aliases, functions, or behavior
 if [ -f /etc/bashrc ]; then
     . /etc/bashrc
 fi
@@ -19,21 +22,21 @@ fi
 # user-specific environment
 # --------------------------------------------------
 # ensure user-local bin directories are in PATH
-# prepend them only if not already present to avoid duplicates
-if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]; then
-    PATH="$HOME/.local/bin:$HOME/bin:$PATH"
-fi
+case ":$PATH:" in
+    *":$HOME/.local/bin:$HOME/bin:"*) ;;
+    *) PATH="$HOME/.local/bin:$HOME/bin:$PATH" ;;
+esac
 export PATH
 
 # --------------------------------------------------
 # optional system behavior
 # --------------------------------------------------
-# uncomment to disable systemctl's automatic pager
-# useful on minimal or remote systems
+# disable systemctl's automatic pager if desired
 # export SYSTEMD_PAGER=
 
 # --------------------------------------------------
 # user-specific aliases and functions
 # --------------------------------------------------
-# aliases and functions may be defined below or sourced
-# from separate files (recommended for maintainability)
+# define aliases and functions here
+# or source separate files for maintainability
+

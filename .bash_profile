@@ -1,26 +1,29 @@
 # --------------------------------------------------
 # ~/.bash_profile
 # --------------------------------------------------
-# login shell initialization file
+# login shell initialization file for bash
 # executed for ssh logins and login shells
-# this file is posix-compatible for cluster safety
+# kept posix-compatible for cluster safety
 
+# --------------------------------------------------
+# source global login environment
+# --------------------------------------------------
+# .profile defines environment variables and
+# hands off to zsh when appropriate
 
-# source profile if it exists
-if [ -f ~/.profile ]; then
-    . ~/.profile
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
 elif [ -t 1 ]; then
     echo "note: ~/.profile not found"
 fi
 
 # --------------------------------------------------
-# switch to zsh for interactive use
+# interactive bash fallback
 # --------------------------------------------------
-# clusters often restrict chsh, so we exec zsh manually
-# this replaces bash with zsh (no subshell)
-# the -l flag starts zsh as a login shell
-# the check prevents infinite recursion
+# if we remain in bash (e.g. zsh unavailable),
+# source bashrc for interactive behavior
 
-# source bashrc if it exists
-# this ensures aliases, paths, and environment are loaded
-[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+if [ -n "$BASH_VERSION" ] && [[ $- == *i* ]]; then
+    [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+fi
+
