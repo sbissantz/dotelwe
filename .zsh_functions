@@ -3,8 +3,8 @@
 # --------------------------------------------------
 #
 # - sumnode <nodeid>
-# - sumjob <jobid>:
-# - sumpartpro: 
+# - sumjob <jobid>
+# - sumpartpro
 # - sumpartpro <partn>
 #
 # --------------------------------------------------
