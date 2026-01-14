@@ -36,7 +36,7 @@ vim.opt.softtabstop = 4                  -- backspace deletes proper spaces
 vim.opt.shiftwidth = 4                   -- width for auto-indents
 vim.opt.expandtab = true                 -- convert tabs to spaces
 vim.opt.mouse = "v"                      -- enable mouse (middle-click paste)
-vim.opt.clipboard = "unnamedplus"        -- use system clipboard by default
+--vim.opt.clipboard = "unnamedplus"        -- use system clipboard by default
 vim.opt.colorcolumn = "80"               -- show a vertical line at 80 chars
 vim.opt.spelllang = { "en_us", "de_de" } -- spell checking languages
 
@@ -68,17 +68,19 @@ local function osc52_copy(lines)
   vim.api.nvim_chan_send(vim.v.stderr, osc52)
 end
 
-vim.g.clipboard = {
-  name = "osc52",
-  copy = {
-    ["+"] = osc52_copy,
-    ["*"] = osc52_copy,
-  },
-  paste = {
-    ["+"] = function() return {} end,
-    ["*"] = function() return {} end,
-  },
-}
+-- send yanks to system clipboard, keep vim registers intact
+vim.api.nvim_create_autocmd("TextYankPost", {
+  callback = function()
+    if vim.v.event.operator ~= "y" then
+      return
+    end
+    local lines = vim.v.event.regcontents
+    if not lines or #lines == 0 then
+      return
+    end
+    osc52_copy(lines)
+  end,
+})
 
 -- Setup lazy.nvim
 require("lazy").setup({
