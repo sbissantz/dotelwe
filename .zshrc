@@ -23,8 +23,6 @@ histfile="$HOME/.zsh_history"
 histsize=2000
 savehist=1000
 
-setopt complete_in_word
-setopt complete_aliases
 setopt hist_ignore_dups
 setopt hist_reduce_blanks
 setopt share_history
@@ -55,13 +53,17 @@ fi
 # --------------------------------------------------
 # completion system
 # --------------------------------------------------
-
+#
 autoload -Uz compinit
 compinit
 
 # --------------------------------------------------
 # dotfile management (bare git repo)
 # --------------------------------------------------
+# note: order of commands matters here!
+
+setopt complete_in_word
+setopt complete_aliases
 
 alias dotfiles='/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME'
 
