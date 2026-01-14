@@ -2,11 +2,15 @@
 # ~/.zsh_functions
 # --------------------------------------------------
 #
+# - sumnode <nodeid>
+# - sumjob <jobid>:
+# - sumpartpro: 
+# - sumpartpro <partn>
 #
 # --------------------------------------------------
 # sumnode
 # --------------------------------------------------
-# get a quick summary of a node.
+# sumnode <nodeid>: quick summary of one(!) node.
 #
 sumnode() {
   local node="$1"
@@ -70,7 +74,7 @@ sumnode() {
 # --------------------------------------------------
 # sumjob
 # --------------------------------------------------
-# get a quick summary of a job.
+# sumjob <jobid>: quick summary of a job.
 #
 sumjob() {
   local job="$1"
@@ -132,4 +136,64 @@ sumjob() {
       if (v["TimeLeft"]) printf("%sTime left:%s   %s\n", BLUE, RESET, v["TimeLeft"])
     }'
 }
+
+# --------------------------------------------------
+# sumpartpro
+# --------------------------------------------------
+# sumpartpro: quick overview over all partitions or projects
+# sumportpro <partition>: quick <partition> or <project> overview
+#
+sumpartpro() {
+  local part="$1"
+  local RESET="\033[0m"
+  local BLUE="\033[34m"
+
+  # ---------- overview  ----------
+  if [ -z "$part" ]; then
+    sinfo -o "%P %D %C" | awk \
+      -v RESET="$RESET" -v BLUE="$BLUE" '
+      NR==1 { next }
+      {
+        # %C = alloc/idle/other/total
+        split($3, c, "/")
+
+        pname = $1
+        suffix = ""
+        if (pname ~ /\*$/) {
+          sub(/\*$/, "", pname)
+          suffix = " (default)"
+        }
+
+        printf("%s%-18s%s  %5s nodes, %5s idle CPUs out of %5s%s\n",
+               BLUE, pname, RESET,
+               $2, c[2], c[4], suffix)
+      }'
+    return 0
+  fi
+
+  # ---------- detailed ----------
+  sinfo -p "$part" -o "%P %l %D %C %m" | awk \
+    -v RESET="$RESET" -v BLUE="$BLUE" '
+    NR==1 { next }
+    {
+      pname = $1
+      if (pname ~ /\*$/) sub(/\*$/, "", pname)
+
+      split($4, c, "/")
+
+      printf("%sPartition:%s   %s\n", BLUE, RESET, pname)
+      printf("%sTime limit:%s  %s\n", BLUE, RESET, $2)
+      printf("%sNodes:%s       %s\n", BLUE, RESET, $3)
+
+      printf("%sCPUs:%s        %s in use, %s idle, %s total\n",
+             BLUE, RESET, c[1], c[2], c[4])
+
+      if ($5 != "N/A") {
+        gb = $5 / 1024
+        printf("%sMemory/node:%s %s GB\n",
+               BLUE, RESET, int(gb))
+      }
+    }'
+}
+
 
