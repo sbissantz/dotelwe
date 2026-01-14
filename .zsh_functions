@@ -1,4 +1,135 @@
 # --------------------------------------------------
 # ~/.zsh_functions
 # --------------------------------------------------
-# zsh user functions 
+#
+#
+# --------------------------------------------------
+# sumnode
+# --------------------------------------------------
+# get a quick summary of a node.
+#
+sumnode() {
+  local node="$1"
+  if [ -z "$node" ]; then
+    echo "Usage: sumnode <nodeName>"
+    return 1
+  fi
+
+  # Minimal styling
+  local RESET="\033[0m"
+  local BOLD="\033[1m"
+  local BLUE="\033[34m"
+
+  scontrol show node "$node" | awk \
+    -v RESET="$RESET" \
+    -v BOLD="$BOLD" \
+    -v BLUE="$BLUE" '
+    {
+      for (i=1; i<=NF; i++) {
+        split($i, kv, "=")
+        if (kv[1] != "" && kv[2] != "") v[kv[1]] = kv[2]
+      }
+    }
+    END {
+      printf("%sNode:%s        %s%s%s\n", BLUE, RESET, BOLD, v["NodeName"], RESET)
+      printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
+
+      if (v["Sockets"] && v["CoresPerSocket"] && v["ThreadsPerCore"])
+        printf("%sTopology:%s    %s%s%s sockets x %s%s%s cores/socket x %s%s%s threads/core\n",
+               BLUE, RESET,
+               BOLD, v["Sockets"], RESET,
+               BOLD, v["CoresPerSocket"], RESET,
+               BOLD, v["ThreadsPerCore"], RESET)
+
+      # CPU usage
+      if (v["CPUAlloc"] && v["CPUTot"]) {
+        free_cpu = v["CPUTot"] - v["CPUAlloc"]
+        printf("%sCPU usage:%s   %s%s%s allocated / %s%s%s total (%s%s%s free)\n",
+               BLUE, RESET,
+               BOLD, v["CPUAlloc"], RESET,
+               BOLD, v["CPUTot"], RESET,
+               BOLD, free_cpu, RESET)
+      }
+
+      if (v["CPULoad"])
+        printf("%sCPU load:%s    %s%s%s\n",
+               BLUE, RESET, BOLD, v["CPULoad"], RESET)
+
+      # Memory usage (SLURM reports MB)
+      if (v["RealMemory"] && v["AllocMem"]) {
+        free_mem = v["RealMemory"] - v["AllocMem"]
+        printf("%sMemory:%s      %s%.1f%s GB allocated / %s%.1f%s GB total (%s%.1f%s GB free)\n",
+               BLUE, RESET,
+               BOLD, v["AllocMem"]/1024.0, RESET,
+               BOLD, v["RealMemory"]/1024.0, RESET,
+               BOLD, free_mem/1024.0, RESET)
+      }
+    }'
+}
+#
+# --------------------------------------------------
+# sumjob
+# --------------------------------------------------
+# get a quick summary of a job.
+#
+sumjob() {
+  local job="$1"
+  if [ -z "$job" ]; then
+    echo "Usage: sumjob <jobid>"
+    return 1
+  fi
+
+  local RESET="\033[0m"
+  local BOLD="\033[1m"
+  local BLUE="\033[34m"
+
+  scontrol show job "$job" 2>/dev/null | awk \
+    -v RESET="$RESET" \
+    -v BOLD="$BOLD" \
+    -v BLUE="$BLUE" '
+    {
+      for (i=1; i<=NF; i++) {
+        split($i, kv, "=")
+        if (kv[1] != "" && kv[2] != "") v[kv[1]] = kv[2]
+      }
+    }
+    END {
+      if (!v["JobId"]) {
+        print "No such job (or permission denied)."
+        exit 1
+      }
+
+      # Some SLURM versions use JobState, others State
+      state = (v["JobState"] ? v["JobState"] : v["State"])
+
+      # Memory request can appear as MinMemoryNode or MinMemoryCPU
+      mem = (v["MinMemoryNode"] ? v["MinMemoryNode"] : v["MinMemoryCPU"])
+
+      # Threads (practical meaning): total workers = tasks x CPUs/task
+      threads = ""
+      if (v["NumTasks"] && v["CPUs/Task"]) threads = v["NumTasks"] * v["CPUs/Task"]
+
+      printf("%sJob:%s         %s%s%s\n", BLUE, RESET, BOLD, v["JobId"], RESET)
+      if (v["JobName"])  printf("%sName:%s        %s\n", BLUE, RESET, v["JobName"])
+      if (state)         printf("%sState:%s       %s\n", BLUE, RESET, state)
+      if (v["Partition"])printf("%sPartition:%s   %s\n", BLUE, RESET, v["Partition"])
+
+      if (v["NumTasks"])
+        printf("%sTasks:%s       %s%s%s\n", BLUE, RESET, BOLD, v["NumTasks"], RESET)
+
+      if (v["CPUs/Task"])
+        printf("%sCPUs/task:%s   %s%s%s\n", BLUE, RESET, BOLD, v["CPUs/Task"], RESET)
+
+      if (v["NumCPUs"])
+        printf("%sCPUs total:%s  %s%s%s\n", BLUE, RESET, BOLD, v["NumCPUs"], RESET)
+
+      if (threads != "")
+        printf("%sThreads:%s     %s%s%s\n", BLUE, RESET, BOLD, threads, RESET)
+
+      if (mem)           printf("%sMemory:%s      %s\n", BLUE, RESET, mem)
+      if (v["TimeLimit"])printf("%sTime limit:%s  %s\n", BLUE, RESET, v["TimeLimit"])
+      if (v["RunTime"])  printf("%sRun time:%s    %s\n", BLUE, RESET, v["RunTime"])
+      if (v["TimeLeft"]) printf("%sTime left:%s   %s\n", BLUE, RESET, v["TimeLeft"])
+    }'
+}
+
