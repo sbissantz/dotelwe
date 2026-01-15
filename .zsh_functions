@@ -1,96 +1,137 @@
 # --------------------------------------------------
 # ~/.zsh_functions
 # --------------------------------------------------
-#
-# - sumnode <nodeid>
-# - sumjob <jobid>
-# - sumpartpro
-# - sumpartpro <partn>
-#
-# --------------------------------------------------
-# sumnode
-# --------------------------------------------------
-# sumnode <nodeid>: quick summary of one(!) node.
-#
-sumnode() {
-  local node="$1"
-  if [ -z "$node" ]; then
-    echo "Usage: sumnode <nodeName>"
-    return 1
-  fi
 
-  # Minimal styling
-  local RESET="\033[0m"
-  local BOLD="\033[1m"
-  local BLUE="\033[34m"
+# ---- helpers ----
+#
+_slurm_blue() { printf "\033[34m"; }
+_slurm_reset() { printf "\033[0m"; }
 
-  scontrol show node "$node" | awk \
-    -v RESET="$RESET" \
-    -v BOLD="$BOLD" \
-    -v BLUE="$BLUE" '
-    {
-      for (i=1; i<=NF; i++) {
-        split($i, kv, "=")
-        if (kv[1] != "" && kv[2] != "") v[kv[1]] = kv[2]
-      }
+# ---- listjobs  ----
+#
+# list all (user) jobs in a human-readable format
+#
+listjobs() {
+  local who="${1:-$USER}"
+  local BLUE="\033[34m" RESET="\033[0m"
+
+  # %R can be long; keep it, but you can swap to %Z or drop if you want.
+  squeue -u "$who" -h -o "%i|%t|%P|%j|%C|%m|%M|%D|%R" | awk -F'|' \
+    -v BLUE="$BLUE" -v RESET="$RESET" '
+    BEGIN {
+      printf "%-10s %-5s %-14s %-26s %-4s %-6s %-10s %-5s %s\n",
+             "JOBID","ST","PARTITION","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
     }
-    END {
-      printf("%sNode:%s        %s%s%s\n", BLUE, RESET, BOLD, v["NodeName"], RESET)
-      printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
-
-      if (v["Sockets"] && v["CoresPerSocket"] && v["ThreadsPerCore"])
-        printf("%sTopology:%s    %s%s%s sockets x %s%s%s cores/socket x %s%s%s threads/core\n",
-               BLUE, RESET,
-               BOLD, v["Sockets"], RESET,
-               BOLD, v["CoresPerSocket"], RESET,
-               BOLD, v["ThreadsPerCore"], RESET)
-
-      # CPU usage
-      if (v["CPUAlloc"] && v["CPUTot"]) {
-        free_cpu = v["CPUTot"] - v["CPUAlloc"]
-        printf("%sCPU usage:%s   %s%s%s allocated / %s%s%s total (%s%s%s free)\n",
-               BLUE, RESET,
-               BOLD, v["CPUAlloc"], RESET,
-               BOLD, v["CPUTot"], RESET,
-               BOLD, free_cpu, RESET)
-      }
-
-      if (v["CPULoad"])
-        printf("%sCPU load:%s    %s%s%s\n",
-               BLUE, RESET, BOLD, v["CPULoad"], RESET)
-
-      # Memory usage (SLURM reports MB)
-      if (v["RealMemory"] && v["AllocMem"]) {
-        free_mem = v["RealMemory"] - v["AllocMem"]
-        printf("%sMemory:%s      %s%.1f%s GB allocated / %s%.1f%s GB total (%s%.1f%s GB free)\n",
-               BLUE, RESET,
-               BOLD, v["AllocMem"]/1024.0, RESET,
-               BOLD, v["RealMemory"]/1024.0, RESET,
-               BOLD, free_mem/1024.0, RESET)
-      }
+    {
+      printf "%-10s %-5s %-14s %-26.26s %-4s %-6s %-10s %-5s %s\n",
+             $1,$2,$3,$4,$5,$6,$7,$8,$9
     }'
 }
+
+# ---- listnodes ----
 #
-# --------------------------------------------------
-# sumjob
-# --------------------------------------------------
-# sumjob <jobid>: quick summary of a job.
+# list all the nodes in a human-readable format
+#
+listnodes() {
+  local part="$1"
+  local BLUE="\033[34m" RESET="\033[0m"
+
+  local fmt="%15N %4c %7m %46f %18G"
+  local cmd=(sinfo -h -o "$fmt")
+  [[ -n "$part" ]] && cmd+=(-p "$part")
+
+  printf "%-15s %-4s %-7s %-46s %-18s\n" "NODELIST" "CPUS" "MEM" "FEATURES" "RESOURCES"
+
+  "${cmd[@]}" | awk -v BLUE="$BLUE" -v RESET="$RESET" '
+    function trim(s){ sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+
+    # sinfo %m is MB (usually). Keep non-numeric values like 56000+ as-is.
+    function human_mem(m, gb){
+      if (m !~ /^[0-9]+$/) return m
+      gb = m/1024.0
+      if (gb >= 1024.0) return sprintf("%.1fT", gb/1024.0)
+      return sprintf("%.0fG", gb)
+    }
+
+    # Make resources readable but keep the raw label visible.
+    # gpu:h100:3 -> 3_H100 (gpu:h100:3)
+    function human_gres_with_raw(g,   out,n,i,raw,base,tok,parts){
+      g = trim(g)
+      if (g=="" || g=="(null)" || g=="N/A") return "-"
+
+      n = split(g, parts, ",")
+      out = ""
+      for (i=1; i<=n; i++) {
+        raw = trim(parts[i]); if (raw=="") continue
+        base = raw; sub(/\(.*/, "", base)  # drop (S:0-1) from parsing only
+
+        tok = raw
+        if (match(base, /^gpu:([^:]+):([0-9]+)$/, m)) {
+          tok = m[2] "_" toupper(m[1]) " (" raw ")"
+        } else if (match(base, /^gpu:([^:]+)$/, m2)) {
+          tok = toupper(m2[1]) " (" raw ")"
+        }
+
+        if (out!="") out = out ", "
+        out = out tok
+      }
+      return out
+    }
+
+    {
+      nl   = trim(substr($0, 1, 15))
+      cpus = trim(substr($0, 17, 4))
+      mem  = trim(substr($0, 22, 7))
+      feat = trim(substr($0, 30, 46))
+      gres = trim(substr($0, 77, 18))
+
+      printf("%s%-15s%s %-4s %-7s %-46s %s\n",
+             BLUE, nl, RESET,
+             cpus,
+             human_mem(mem),
+             feat,
+             human_gres_with_raw(gres))
+    }'
+}
+
+# ---- listpartpros ----
+#
+# list partitions (and projects)  in a human-readable format
+#
+listpartpros() {
+  local BLUE="\033[34m" RESET="\033[0m"
+
+  sinfo -h -o "%P|%D|%C" | awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
+    {
+      pname=$1; nodes=$2; c=$3
+      suffix=""
+      if (pname ~ /\*$/) { sub(/\*$/, "", pname); suffix=" (default)" }
+
+      split(c, a, "/") # alloc/idle/other/total
+
+      printf("%s%-20s%s %4s nodes, %4s idle CPUs / %s%s\n",
+             BLUE, pname, RESET,
+             nodes, a[2], a[4], suffix)
+    }'
+}
+
+# ---- sumjob ----
+# 
+# summarize the job with <jobid>
+# sumjob <jobid>
 #
 sumjob() {
-  local job="$1"
-  if [ -z "$job" ]; then
+  local jobid="$1"
+  if [[ -z "$jobid" ]]; then
     echo "Usage: sumjob <jobid>"
     return 1
   fi
 
-  local RESET="\033[0m"
-  local BOLD="\033[1m"
-  local BLUE="\033[34m"
+  local BLUE="\033[34m" RESET="\033[0m"
 
-  scontrol show job "$job" 2>/dev/null | awk \
-    -v RESET="$RESET" \
-    -v BOLD="$BOLD" \
-    -v BLUE="$BLUE" '
+  # scontrol is the most reliable for a single job snapshot.
+  scontrol show job "$jobid" 2>/dev/null | awk \
+    -v BLUE="$BLUE" -v RESET="$RESET" '
     {
       for (i=1; i<=NF; i++) {
         split($i, kv, "=")
@@ -98,102 +139,122 @@ sumjob() {
       }
     }
     END {
-      if (!v["JobId"]) {
-        print "No such job (or permission denied)."
-        exit 1
+      if (!v["JobId"]) { print "Job not found: " ENVIRON["jobid"]; exit 0 }
+
+      printf("%sJob:%s         %s\n", BLUE, RESET, v["JobId"])
+      if (v["JobName"]) printf("%sName:%s        %s\n", BLUE, RESET, v["JobName"])
+      if (v["UserId"])  printf("%sUser:%s        %s\n", BLUE, RESET, v["UserId"])
+      if (v["Partition"]) printf("%sPartition:%s   %s\n", BLUE, RESET, v["Partition"])
+      if (v["State"])   printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
+      if (v["Reason"])  printf("%sReason:%s      %s\n", BLUE, RESET, v["Reason"])
+
+      if (v["SubmitTime"]) printf("%sSubmitted:%s   %s\n", BLUE, RESET, v["SubmitTime"])
+      if (v["StartTime"])  printf("%sStart:%s       %s\n", BLUE, RESET, v["StartTime"])
+      if (v["RunTime"])    printf("%sRunTime:%s     %s\n", BLUE, RESET, v["RunTime"])
+      if (v["TimeLimit"])  printf("%sTimeLimit:%s   %s\n", BLUE, RESET, v["TimeLimit"])
+
+      if (v["NumNodes"])   printf("%sNodes:%s       %s\n", BLUE, RESET, v["NumNodes"])
+      if (v["NodeList"])   printf("%sNodeList:%s    %s\n", BLUE, RESET, v["NodeList"])
+
+      if (v["NumCPUs"])    printf("%sCPUs:%s        %s\n", BLUE, RESET, v["NumCPUs"])
+      if (v["ReqMem"])     printf("%sReqMem:%s      %s\n", BLUE, RESET, v["ReqMem"])
+      if (v["TRES"])       printf("%sTRES:%s        %s\n", BLUE, RESET, v["TRES"])
+      if (v["Gres"])       printf("%sGres:%s        %s\n", BLUE, RESET, v["Gres"])
+      if (v["StdOut"])     printf("%sStdOut:%s      %s\n", BLUE, RESET, v["StdOut"])
+      if (v["StdErr"])     printf("%sStdErr:%s      %s\n", BLUE, RESET, v["StdErr"])
+    }' jobid="$jobid"
+}
+
+# ---- sumnode ----
+#
+# summarize the node <nodeid>
+# sumnode <nodeid>
+#
+sumnode() {
+  local node="$1"
+  if [[ -z "$node" ]]; then
+    echo "Usage: sumnode <node>"
+    return 1
+  fi
+
+  local BLUE="\033[34m"
+  local RESET="\033[0m"
+
+  scontrol show node "$node" 2>/dev/null | awk \
+    -v BLUE="$BLUE" -v RESET="$RESET" '
+    {
+      for (i=1; i<=NF; i++) {
+        split($i, kv, "=")
+        if (kv[1] != "" && kv[2] != "")
+          v[kv[1]] = kv[2]
       }
+    }
+    END {
+      if (!v["NodeName"]) { print "Node not found:", "'"$node"'"; exit }
 
-      # Some SLURM versions use JobState, others State
-      state = (v["JobState"] ? v["JobState"] : v["State"])
+      printf("%sNode:%s        %s\n", BLUE, RESET, v["NodeName"])
+      if (v["State"]) printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
 
-      # Memory request can appear as MinMemoryNode or MinMemoryCPU
-      mem = (v["MinMemoryNode"] ? v["MinMemoryNode"] : v["MinMemoryCPU"])
+      if (v["Sockets"] && v["CoresPerSocket"] && v["ThreadsPerCore"])
+        printf("%sTopology:%s    %s sockets x %s cores x %s threads\n",
+               BLUE, RESET,
+               v["Sockets"], v["CoresPerSocket"], v["ThreadsPerCore"])
 
-      # Threads (practical meaning): total workers = tasks x CPUs/task
-      threads = ""
-      if (v["NumTasks"] && v["CPUs/Task"]) threads = v["NumTasks"] * v["CPUs/Task"]
+      if (v["CPUAlloc"] && v["CPUTot"])
+        printf("%sCPUs:%s        %s alloc / %s total (%s free)\n",
+               BLUE, RESET,
+               v["CPUAlloc"], v["CPUTot"],
+               v["CPUTot"] - v["CPUAlloc"])
 
-      printf("%sJob:%s         %s%s%s\n", BLUE, RESET, BOLD, v["JobId"], RESET)
-      if (v["JobName"])  printf("%sName:%s        %s\n", BLUE, RESET, v["JobName"])
-      if (state)         printf("%sState:%s       %s\n", BLUE, RESET, state)
-      if (v["Partition"])printf("%sPartition:%s   %s\n", BLUE, RESET, v["Partition"])
+      if (v["CPULoad"])
+        printf("%sLoad:%s        %s\n", BLUE, RESET, v["CPULoad"])
 
-      if (v["NumTasks"])
-        printf("%sTasks:%s       %s%s%s\n", BLUE, RESET, BOLD, v["NumTasks"], RESET)
+      # Memory in MB -> GB
+      if (v["RealMemory"] && v["AllocMem"])
+        printf("%sMemory:%s      %.1fG alloc / %.1fG total (%.1fG free)\n",
+               BLUE, RESET,
+               v["AllocMem"]/1024.0,
+               v["RealMemory"]/1024.0,
+               (v["RealMemory"]-v["AllocMem"])/1024.0)
 
-      if (v["CPUs/Task"])
-        printf("%sCPUs/task:%s   %s%s%s\n", BLUE, RESET, BOLD, v["CPUs/Task"], RESET)
+      if (v["Gres"])
+        printf("%sGRES:%s        %s\n", BLUE, RESET, v["Gres"])
 
-      if (v["NumCPUs"])
-        printf("%sCPUs total:%s  %s%s%s\n", BLUE, RESET, BOLD, v["NumCPUs"], RESET)
-
-      if (threads != "")
-        printf("%sThreads:%s     %s%s%s\n", BLUE, RESET, BOLD, threads, RESET)
-
-      if (mem)           printf("%sMemory:%s      %s\n", BLUE, RESET, mem)
-      if (v["TimeLimit"])printf("%sTime limit:%s  %s\n", BLUE, RESET, v["TimeLimit"])
-      if (v["RunTime"])  printf("%sRun time:%s    %s\n", BLUE, RESET, v["RunTime"])
-      if (v["TimeLeft"]) printf("%sTime left:%s   %s\n", BLUE, RESET, v["TimeLeft"])
+      if (v["AvailableFeatures"])
+        printf("%sFeatures:%s    %s\n", BLUE, RESET, v["AvailableFeatures"])
     }'
 }
 
-# --------------------------------------------------
-# sumpartpro
-# --------------------------------------------------
-# sumpartpro: quick overview over all partitions or projects
-# sumportpro <partition>: quick <partition> or <project> overview
+# ---- sumpartpro ----
+#
+# summarize the partition or project <partition>
+# sumpartpro <part>
 #
 sumpartpro() {
   local part="$1"
-  local RESET="\033[0m"
-  local BLUE="\033[34m"
-
-  # ---------- overview  ----------
-  if [ -z "$part" ]; then
-    sinfo -o "%P %D %C" | awk \
-      -v RESET="$RESET" -v BLUE="$BLUE" '
-      NR==1 { next }
-      {
-        # %C = alloc/idle/other/total
-        split($3, c, "/")
-
-        pname = $1
-        suffix = ""
-        if (pname ~ /\*$/) {
-          sub(/\*$/, "", pname)
-          suffix = " (default)"
-        }
-
-        printf("%s%-18s%s  %5s nodes, %5s idle CPUs out of %5s%s\n",
-               BLUE, pname, RESET,
-               $2, c[2], c[4], suffix)
-      }'
-    return 0
+  if [[ -z "$part" ]]; then
+    echo "Usage: sumpartpro <partition>"
+    echo "Tip:   listpartpros"
+    return 1
   fi
 
-  # ---------- detailed ----------
-  sinfo -p "$part" -o "%P %l %D %C %m" | awk \
-    -v RESET="$RESET" -v BLUE="$BLUE" '
-    NR==1 { next }
+  local BLUE="\033[34m" RESET="\033[0m"
+
+  sinfo -h -p "$part" -o "%P|%l|%D|%C|%m" | awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
     {
-      pname = $1
+      pname=$1; tl=$2; nodes=$3; c=$4; mem=$5
       if (pname ~ /\*$/) sub(/\*$/, "", pname)
 
-      split($4, c, "/")
+      split(c, a, "/") # alloc/idle/other/total
 
       printf("%sPartition:%s   %s\n", BLUE, RESET, pname)
-      printf("%sTime limit:%s  %s\n", BLUE, RESET, $2)
-      printf("%sNodes:%s       %s\n", BLUE, RESET, $3)
+      printf("%sTime limit:%s  %s\n", BLUE, RESET, tl)
+      printf("%sNodes:%s       %s\n", BLUE, RESET, nodes)
+      printf("%sCPUs:%s        %s in use, %s idle, %s total\n", BLUE, RESET, a[1], a[2], a[4])
 
-      printf("%sCPUs:%s        %s in use, %s idle, %s total\n",
-             BLUE, RESET, c[1], c[2], c[4])
-
-      if ($5 != "N/A") {
-        gb = $5 / 1024
-        printf("%sMemory/node:%s %s GB\n",
-               BLUE, RESET, int(gb))
-      }
+      # mem is per node in MB (often). Keep non-numeric as-is.
+      if (mem ~ /^[0-9]+$/) printf("%sMem/node:%s    %.0fG\n", BLUE, RESET, mem/1024.0)
+      else if (mem != "N/A" && mem != "") printf("%sMem/node:%s    %s\n", BLUE, RESET, mem)
     }'
 }
-
 
