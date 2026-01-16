@@ -30,7 +30,8 @@
 
 #SBATCH --mail-type=END                # options: END, FAIL, ALL
 
-#SBATCH --export=ALL                # start job in a clean environment 
+# Option "NONE" does not work
+# #SBATCH --export=NONE              # start job in a clean environment 
                                      # no inherited shell vars (only SLURM_*)
                                      # variables defined below (see: export)
                                      # default: ALL (all variables inherited)
