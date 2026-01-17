@@ -32,6 +32,5 @@
 !.gitconfig
 !.gitignore
 
-!README.md
-
-!README.md
+!examples/
+!examples/*
