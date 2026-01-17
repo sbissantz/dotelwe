@@ -1,15 +1,17 @@
-outdir <- Sys.getenv("OUTDIR", ".")
-sink(file.path(outdir,
- sprintf("rsesinfo-%s.txt", Sys.getenv("SLURM_JOB_ID"))))
+## --- reproducibility snapshot ---
 
-utils::sessionInfo()
+writeLines(
+  capture.output(utils::sessionInfo()),
+  "sessioninfo.txt"
+)
 
-sink()
+## --- workplace ---
 
-sink(file.path(outdir,
- sprintf("routput-%s.txt", Sys.getenv("SLURM_JOB_ID"))))
+2 + 2
 
-2+2
+set.seed(123)          
 
-sink()
+result <- rnorm(10)
 
+## --- output ---
+saveRDS(result, file.path("results", "result.rds"))
