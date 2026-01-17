@@ -85,15 +85,31 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 -- Setup lazy.nvim
 require("lazy").setup({
   spec = {
-      -- Colorscheme
-    { "rafi/awesome-vim-colorschemes", 
-      lazy = false,
-      init = function() 
-        -- Set the colorscheme to jellybeans
-        vim.cmd("colorscheme jellybeans") 
-      end 
-    },
-  
+
+    -- Colorscheme
+      {
+        "wtfox/jellybeans.nvim",
+        lazy = false,
+        priority = 1000,
+        config = function()
+          local hour = tonumber(os.date("%H"))
+          if hour >= 8 and hour < 17 then
+            vim.cmd("colorscheme jellybeans-muted-light")
+          else
+            vim.cmd("colorscheme jellybeans-muted")
+          end
+        end,
+      },
+
+    -- Colorscheme (old)
+    --{ "rafi/awesome-vim-colorschemes", 
+      --lazy = false,
+      --init = function() 
+        ---- Set the colorscheme to jellybeans
+        --vim.cmd("colorscheme jellybeans") 
+      --end 
+    --} ,
+    
     -- Comment quickly
     { "preservim/nerdcommenter", lazy = false },
 
@@ -113,11 +129,12 @@ require("lazy").setup({
     { "sheerun/vim-polyglot" },
 
 	-- GitHub Copilot
-	{ "github/copilot.vim", lazy = false, },
+	{ "github/copilot.vim", lazy = false, enabled = FALSE},  -- disabled
 
    --Latex
     {
       "lervag/vimtex",
+      enabled = false,        -- disabled
       lazy = false,
       init = function ()
         vim.g.vimtex_compiler_latexmk_engines = {
@@ -132,6 +149,7 @@ require("lazy").setup({
 
     -- R programming 
     { "R-nvim/R.nvim",
+    enabled = false, -- disabled 
      -- Only required if you also set defaults.lazy = true 
     lazy = false,
     -- R.nvim is still young and we may make some breaking changes from time
