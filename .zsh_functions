@@ -7,11 +7,11 @@
 _slurm_blue() { printf "\033[34m"; }
 _slurm_reset() { printf "\033[0m"; }
 
-# ---- listjobs  ----
+# ---- lsjobs  ----
 #
 # list all (user) jobs in a human-readable format
 #
-listjobs() {
+lsjobs() {
   local who="${1:-$USER}"
   local BLUE="\033[34m" RESET="\033[0m"
 
@@ -28,11 +28,11 @@ listjobs() {
     }'
 }
 
-# ---- listnodes ----
+# ---- lsnodes ----
 #
 # list all the nodes in a human-readable format
 #
-listnodes() {
+lsnodes() {
   local part="$1"
   local BLUE="\033[34m" RESET="\033[0m"
 
@@ -94,11 +94,11 @@ listnodes() {
     }'
 }
 
-# ---- listpartpros ----
+# ---- lsparts ----
 #
 # list partitions (and projects)  in a human-readable format
 #
-listpartpros() {
+lsparts() {
   local BLUE="\033[34m" RESET="\033[0m"
 
   sinfo -h -o "%P|%D|%C" | awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
@@ -124,6 +124,7 @@ sumjob() {
   local jobid="$1"
   if [[ -z "$jobid" ]]; then
     echo "Usage: sumjob <jobid>"
+    echo "Tip:   lsjobs"
     return 1
   fi
 
@@ -174,6 +175,7 @@ sumnode() {
   local node="$1"
   if [[ -z "$node" ]]; then
     echo "Usage: sumnode <node>"
+    echo "Tip:   lsnodes"
     return 1
   fi
 
@@ -225,16 +227,16 @@ sumnode() {
     }'
 }
 
-# ---- sumpartpro ----
+# ---- sumpart ----
 #
 # summarize the partition or project <partition>
-# sumpartpro <part>
+# sumpart <part>
 #
-sumpartpro() {
+sumpart() {
   local part="$1"
   if [[ -z "$part" ]]; then
-    echo "Usage: sumpartpro <partition>"
-    echo "Tip:   listpartpros"
+    echo "Usage: sumpart <partition>"
+    echo "Tip:   lsparts"
     return 1
   fi
 
@@ -257,4 +259,5 @@ sumpartpro() {
       else if (mem != "N/A" && mem != "") printf("%sMem/node:%s    %s\n", BLUE, RESET, mem)
     }'
 }
+
 
