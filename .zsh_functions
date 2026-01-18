@@ -15,7 +15,6 @@ lsjobs() {
   local who="${1:-$USER}"
   local BLUE="\033[34m" RESET="\033[0m"
 
-  # %R can be long; keep it, but you can swap to %Z or drop if you want.
   squeue -u "$who" -h -o "%i|%t|%P|%j|%C|%m|%M|%D|%R" | awk -F'|' \
     -v BLUE="$BLUE" -v RESET="$RESET" '
     BEGIN {
@@ -23,8 +22,10 @@ lsjobs() {
              "JOBID","ST","PARTITION","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
     }
     {
-      printf "%-10s %-5s %-14s %-26.26s %-4s %-6s %-10s %-5s %s\n",
-             $1,$2,$3,$4,$5,$6,$7,$8,$9
+      # colorize only the JOBID column
+      printf "%s%-10s%s %-5s %-14s %-26.26s %-4s %-6s %-10s %-5s %s\n",
+             BLUE, $1, RESET,
+             $2, $3, $4, $5, $6, $7, $8, $9
     }'
 }
 
