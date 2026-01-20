@@ -13,7 +13,7 @@
 # |       |├── rsessioninfo.txt
 # |       |└── results/
 #
-# Important: create /run before your submit!
+# Important: create ./run before your submit!
 
 #SBATCH --job-name=foobar          # job name 
                                
@@ -65,7 +65,7 @@ set -euo pipefail                      # strict shell mode: fail fast on
 
 # --- files / logging ---
 
-RUN_DIR="$SLURM_SUBMIT_DIR/runs/$(date +%H%M-%Y%m%d)_$SLURM_JOB_ID" 
+RUN_DIR="$SLURM_SUBMIT_DIR/runs/$SLURM_JOB_ID"
 mkdir -p "$RUN_DIR"                             # create per-job run directory 
 cd "$RUN_DIR"                                   # switch into it
 
@@ -124,6 +124,13 @@ env | sort > "env.txt" # record environment: reproducibility
 #
 
 srun Rscript "$SLURM_SUBMIT_DIR/foobar.R"
+
+# --- rename files ---
+# format: YYMMDDHHMM_JOBID
+
+TS="$(date +%y%m%d%H%M)"
+cd "$SLURM_SUBMIT_DIR/runs"
+mv "$SLURM_JOB_ID" "${TS}_$SLURM_JOB_ID"
 
 # --- logging (end) ---
 
