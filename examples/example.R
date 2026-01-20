@@ -2,7 +2,7 @@
 
 writeLines(
   capture.output(utils::sessionInfo()),
-  "sessioninfo.txt"
+  "rsessioninfo.txt"
 )
 
 ## --- workplace ---
