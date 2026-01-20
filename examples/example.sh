@@ -10,7 +10,7 @@
 # |       |├── stdout.log
 # |       |├── stderr.log
 # |       |├── env.txt
-# |       |├── sessioninfo.txt
+# |       |├── rsessioninfo.txt
 # |       |└── results/
 #
 # Important: create /run before your submit!
@@ -41,10 +41,11 @@
 
 #SBATCH --hint=nomultithread        # avoid hardware hyper-threading (intel) / smt (amd)
 
+#SBATCH --array=1-10                # for array jobs
+
 #SBATCH --output=runs/%j/stdout.log   # create ./runs/%j/stdout.log
 #SBATCH --error=runs/%j/stderr.log    # create ./runs/%j/stderr.log
-                                      # %j: jobid (%x: name - seems not to work)
-
+                                     
 #SBATCH --mail-type=END              # options: END, FAIL, ALL
 
                                      # Option "NONE" does not work (?)
@@ -64,7 +65,7 @@ set -euo pipefail                      # strict shell mode: fail fast on
 
 # --- files / logging ---
 
-RUN_DIR="$SLURM_SUBMIT_DIR/runs/$SLURM_JOB_ID" 
+RUN_DIR="$SLURM_SUBMIT_DIR/runs/$(date +%H%M-%Y%m%d)_$SLURM_JOB_ID" 
 mkdir -p "$RUN_DIR"                             # create per-job run directory 
 cd "$RUN_DIR"                                   # switch into it
 
