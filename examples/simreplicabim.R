@@ -10,10 +10,28 @@
 ## to the form: YYMMDD-HHMM_<JOBID>
 ## ============================================================================
 
+## -- helper functions ---
+
+get_env_chr <- function(var) {
+  val <- Sys.getenv(var, unset = NA_character_)
+  if (is.na(val) || !nzchar(val)) {
+    stop("Required environment variable not set or empty: ", var, call. = FALSE)
+  }
+  val
+}
+
+get_env_int <- function(var) {
+  val <- Sys.getenv(var, unset = NA_character_)
+  if (is.na(val) || !nzchar(val)) {
+    stop("Required environment variable not set: ", var, call. = FALSE)
+  }
+  suppressWarnings(as.integer(val))
+}
+
 ## --- project name & job id ---
 
-project_name <- Sys.getenv("PROJECT_NAME", "")
-job_id <- Sys.getenv("SLURM_JOB_ID", "local")
+project_name <- get_env_chr("PROJECT_NAME")
+job_id       <- get_env_chr("SLURM_JOB_ID")
 
 ## --- logging (start) ---
 
@@ -23,34 +41,31 @@ cat("Time:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
 ## --- (more) environment variables ---
 
 # import path-specific environment variables 
-submit_dir <- Sys.getenv("SLURM_SUBMIT_DIR", ".") # project root
-data_dir   <- Sys.getenv("DATA_DIR", "")
-stan_dir   <- Sys.getenv("STAN_DIR", "")
-job_dir   <- Sys.getenv("JOB_DIR", "")
+submit_dir   <- get_env_chr("SLURM_SUBMIT_DIR")   # project root
+data_dir     <- get_env_chr("DATA_DIR")
+stan_dir     <- get_env_chr("STAN_DIR")
+job_dir      <- get_env_chr("JOB_DIR")
+result_dir   <- get_env_chr("RESULT_DIR")
+snapshot_dir <- get_env_chr("SNAPSHOT_DIR")
 
-# import job-specifif environment variable
-job_dir_id <- Sys.getenv("JOB_DIR_ID", "") 
-result_dir <- Sys.getenv("RESULT_DIR", "")
-snapshot_dir   <- Sys.getenv("SNAPSHOT_DIR", "")
+job_dir_id <- get_env_chr("JOB_DIR_ID") 
+result_dir <- get_env_chr("RESULT_DIR")
+snapshot_dir   <- get_env_chr("SNAPSHOT_DIR")
 
 # import and define computation-specific environment variables
 
 # number of nodes (often: 1)
-n_nodes <- as.integer(Sys.getenv("SLURM_JOB_NUM_NODES", "1"))
-
+n_nodes <- get_env_int("SLURM_JOB_NUM_NODES")
 # number of, say R, processes per node (often: 1)
-n_tasks_per_node <- as.integer(Sys.getenv("SLURM_NTASKS_PER_NODE", "1")) 
-
+n_tasks_per_node <- get_env_int("SLURM_NTASKS_PER_NODE")
 # slurm language: number of cpus (cores) per task
-n_cpus_per_task <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", "4"))
-# stan language: number of chains (often: 4 & equals n_cpu_per_task)
+n_cpus_per_task <- get_env_int("SLURM_CPUS_PER_TASK")
+# stan language: number of chains (often: 4 and equals n_cpu_per_task)
 n_chains <- n_cpus_per_task
-
 # run all chains in parallel
 parallel_chains <- n_chains
-
 # stan language: number of threads per chain (often: 1)
-threads_per_chain <- as.integer(Sys.getenv("STAN_NUM_THREADS", "1"))
+threads_per_chain <- get_env_int("STAN_NUM_THREADS")
 # slurm language: number of threads per task (same concept, different wording)
 threads_per_task <- threads_per_chain
 
@@ -64,7 +79,7 @@ writeLines(
 ## --- metadata (stdout.log) ---
 
 cat(
-  "=== Runtime metadata ===\n",
+  " Runtime metadata\n",
   "[Job]\n",
   "  Project:           ", project_name, "\n",
   "  Job ID:            ", job_id, "\n",
@@ -82,7 +97,7 @@ cat(
   "  STAN_DIR:          ", stan_dir, "\n",
   "  RESULT_DIR:        ", result_dir, "\n",
   "  SNAPSHOT_DIR:      ", snapshot_dir, "\n",
-  "========================\n\n",
+  "\n\n",
   sep = ""
 )
 
@@ -210,8 +225,8 @@ cat("Saved fit to:", out_file, "\n")
 cat("Done.\n")
 
 # reload
-#library(cmdstanr)
-#fit_md2polsi <- readRDS("fit_md2polsi.rds")
+# library(cmdstanr)
+# fit_md2polsi <- readRDS("fit_md2polsi.rds")
 
 ## --- logging (end) ---
 cat("\n=== End R session (job:", job_id, ") ===\n")

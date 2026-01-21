@@ -2,19 +2,18 @@
 
 ## ============================================================================
 ## simreplicabim.sh - slurm submit script
-##
-## creates a per-job directory under jobs/<JOBID> so Slurm logs land inside it,
+## 
+## creates a per-job directory under jobs/<JOBID> so slurm logs land inside it,
 ## snapshots the exact code/model used, runs the r entrypoint, then renames the
-## job directory to YYMMDD-HHMM_JOBID.
+##   - YYMMDD-HHMM_<JOBID>            on success
+##   - YYMMDD-HHMM_<JOBID>__DEBUG     on failure
 ## ============================================================================
 
 ## --- required variables ---
 
-# set these two variables, 
-export PROJECT_NAME="simreplicabim"   # set name explicitly!
-
-# TODO
-export R_VERSION=4.4                  # set version explicitly!
+# set these two variables explicitly, the rest is taken care of
+export PROJECT_NAME="simreplicabim"   
+export R_VERSION="4.4"                 
 
 ## --- project structure ---
 
@@ -28,7 +27,7 @@ export R_VERSION=4.4                  # set version explicitly!
 # |   |├── stanmodel.stan            # stan source
 # |   |└── stanmodel                 # stan compiled
 # |├── jobs/                         # job-specific dirs
-# |   |└── {TS}_{SLURM_JOB_ID/}     
+# |   |└── {TS_START}_{SLURM_JOB_ID/}     
 # |       |├── stdout.log            # slurm stdout
 # |       |├── stderr.log            # slurm stderr
 # |       |├── snapshots/            # snapshot(s) of code and models
@@ -48,7 +47,7 @@ export R_VERSION=4.4                  # set version explicitly!
 #SBATCH --job-name=srb             # job name (abbreviated project name)
 
 #SBATCH --time=02:30:00            # format:HH:MM:SS
-#SBATCH --mem=16GB                 # options: K M G T 
+#SBATCH --mem=16G                  # options: K M G T 
                                    # Tip: add ~10% safety margin
 
 #SBATCH --nodes=1                  # 1 physical node
@@ -68,22 +67,15 @@ set -euo pipefail                  # strict shell mode: fail fast on
                                    # -e: errors, -u: unset variables, 
                                    # -o pipefail: broken pipeline
 
-## --- project-level checks ---
-
-# sanity check: data/, stan/, jobs/ must exist before you submit
-for d in data stan jobs; do
-  [ -d "${SLURM_SUBMIT_DIR}/$d" ] || { echo "Missing required directory: $d"; exit 1; }
-done
-
 ## --- environment variables ---
 
 # create and export required structural directories and environment variables
 export DATA_DIR="${SLURM_SUBMIT_DIR}/data"
 export STAN_DIR="${SLURM_SUBMIT_DIR}/stan"
-export JOB_DIR="${SLURM_SUBMIT_DIR}/jobs/"   
+export JOB_DIR="${SLURM_SUBMIT_DIR}/jobs"   
 
 # create and export job-specific directories and environment variables
-export JOB_DIR_ID="${JOB_DIR}/${SLURM_JOB_ID}"   # job-specific   
+export JOB_DIR_ID="${JOB_DIR}/${SLURM_JOB_ID}"      # job-specific   
 export RESULT_DIR="${JOB_DIR_ID}/results"           # job-specific
 export SNAPSHOT_DIR="${JOB_DIR_ID}/snapshots"       # job-specific 
 
@@ -99,58 +91,105 @@ export NUMEXPR_NUM_THREADS="${NUM_THREADS}"
 
 # ---job directory setup ---
 
-mkdir -p "${JOB_DIR_ID}" "${RESULT_DIR}" "${SNAPSHOT_DIR}"
+# note: ${JOB_DIR_ID} is created by slurm with the stdout and sterror files
+mkdir -p "${JOB_DIR}" "${RESULT_DIR}" "${SNAPSHOT_DIR}"
 cd "${JOB_DIR_ID}"
 
-## --- environment reproducibility snapshot ---
+## --- timestamps ---
 
-# record all environment variables
+TS_START="$(date +%y%m%d-%H%M)"       # start time for renaming the job 
+TS_START_EPOCH="$(date +%s)"          # for duration
+
+SUFFIX=""                           # empty on success; __DEBUG on failure
+
+rename_job_dir() {
+  set +e
+  cd "${JOB_DIR}" || return 0
+
+  local old_id="${SLURM_JOB_ID}"
+  local new_id="${TS_START}_${SLURM_JOB_ID}${SUFFIX}"
+
+  # avoid failing the whole job if rename is not possible (e.g., collision)
+  if [ -d "${old_id}" ] && [ ! -e "${new_id}" ]; then
+    mv "${old_id}" "${new_id}"    # rename, but ... 
+    ln -sfn "${new_id}" latest    # create a symlink "-s" (see: man ln)
+  fi
+}
+
+# any error, mark debug
+trap 'SUFFIX="__DEBUG"' ERR
+# always rename on exit (success or failure)
+trap rename_job_dir EXIT
+
+## --- reproducibility snapshots ---
+
+# snapshot all environment variables
 env | sort > "${SNAPSHOT_DIR}/env.txt"
 
-## --- file reproducibility snapshot ---
+# snapshot all project files (required; cp fails if missing) 
+cp -f "${SLURM_SUBMIT_DIR}/${PROJECT_NAME}".* "${SNAPSHOT_DIR}/"
 
-# snapshot exact code and stan sources used for this job
-cp -f "${SLURM_SUBMIT_DIR}/${PROJECT_NAME}.sh" "${SNAPSHOT_DIR}/" || true
-cp -f "${SLURM_SUBMIT_DIR}/${PROJECT_NAME}.R"  "${SNAPSHOT_DIR}/" || true
-cp -f "${STAN_DIR}"/*.stan "${SNAPSHOT_DIR}/" || true
+# snapshot stan files if present (optional)
+shopt -s nullglob   # don't fail if there are no stan files
+cp -f "${STAN_DIR}"/*.stan "${SNAPSHOT_DIR}/"
+shopt -u nullglob
 
 ## --- logging (start) ---
 
-echo "Start: $(date -Is)"
-echo
-echo "Project name: ${PROJECT_NAME}"
-echo "Job name: ${SLURM_JOB_NAME}"
-echo "Job ID: ${SLURM_JOB_ID}"
-echo "Node: ${SLURMD_NODENAME:-$SLURM_NODELIST}"
-echo "Partition: ${SLURM_JOB_PARTITION}"
-echo "JOB_DIR_ID: ${JOB_DIR_ID}"
-echo "RESULT_DIR: ${RESULT_DIR}"
-echo
+printf '%s\n' \
+  "Start project: ${PROJECT_NAME}" \
+  "Script: ${PROJECT_NAME}.sh" \
+  "Start time: $(date '+%Y-%m-%d %H:%M:%S')" \
+  "Submit command: $0 $*" \
+  "" \
+  "Job ID: ${SLURM_JOB_ID}" \
+  "Job name: ${SLURM_JOB_NAME}" \
+  "Node: ${SLURMD_NODENAME:-${SLURM_NODELIST}}" \
+  "Partition: ${SLURM_JOB_PARTITION}" \
+  "" \
+  "JOB_DIR: ${JOB_DIR_ID}" \
+  "RESULT_DIR: ${RESULT_DIR}"
 
 ## --- modules ---
 
 module purge
-module load R/${R_VERSION}
+module load "R/${R_VERSION}"
 
 ## --- run ---
 
 srun Rscript "${SLURM_SUBMIT_DIR}/${PROJECT_NAME}.R"
 
-## --- finalize: rename job directory ---
+# --- timestamps (again) ---
 
-# rename jobs/<JOBID> to jobs/<YYMMDD-HHMM_JOBID> for sorting
-TS="$(date +%y%m%d-%H%M)"
-cd "${SLURM_SUBMIT_DIR}/jobs"
+TS_END_EPOCH="$(date +%s)"
+DURATION_SEC=$((END_EPOCH - START_EPOCH)) 
 
-OLD_ID="${SLURM_JOB_ID}"
-NEW_ID="${TS}_${SLURM_JOB_ID}"
+format_duration() {
+  local s=$1
+  local d h m
 
-# avoid failing the whole job if rename is not possible (e.g., name collision).
-if [ -d "${OLD_ID}" ] && [ ! -e "${NEW_ID}" ]; then
-  mv "${OLD_ID}" "${NEW_ID}"
-fi
+  d=$((s / 86400))
+  h=$(( (s % 86400) / 3600 ))
+  m=$(( (s % 3600) / 60 ))
+  s=$((s % 60))
+
+  if [ "$d" -gt 0 ]; then
+    printf '%dd %02dh %02dm %02ds\n' "$d" "$h" "$m" "$s"
+  elif [ "$h" -gt 0 ]; then
+    printf '%02dh %02dm %02ds\n' "$h" "$m" "$s"
+  else
+    printf '%02dm %02ds\n' "$m" "$s"
+  fi
+}
+
+DURATION_FMT=$(format_duration "$DURATION_SEC")
 
 # --- logging (end) ---
 
-echo
-echo "End: $(date -Is)"
+printf '%s\n' \
+  "End project: ${PROJECT_NAME}" \
+  "End time: $(date '+%Y-%m-%d %H:%M:%S')" \
+  "Duration: ${DURATION_FMT}" \
+  "" \
+  "Final job directory: ${JOB_DIR}/${TS_START}_${SLURM_JOB_ID}${SUFFIX}"
+
