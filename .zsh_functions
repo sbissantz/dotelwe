@@ -4,7 +4,7 @@
 
 # ---- helpers ----
 #
-_slurm_blue() { printf "\033[34m"; }
+_slurm_blue() { printf "\033[94m"; }
 _slurm_reset() { printf "\033[0m"; }
 
 # ---- lsjobs  ----
@@ -13,7 +13,8 @@ _slurm_reset() { printf "\033[0m"; }
 #
 lsjobs() {
   local who="${1:-$USER}"
-  local BLUE="\033[34m" RESET="\033[0m"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
 
   squeue -u "$who" -h -o "%i|%t|%P|%j|%C|%m|%M|%D|%R" | awk -F'|' \
     -v BLUE="$BLUE" -v RESET="$RESET" '
@@ -35,8 +36,8 @@ lsjobs() {
 #
 lsnodes() {
   local part="$1"
-  local BLUE="\033[34m" RESET="\033[0m"
-
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
   local fmt="%15N %4c %7m %46f %18G"
   local cmd=(sinfo -h -o "$fmt")
   [[ -n "$part" ]] && cmd+=(-p "$part")
@@ -100,7 +101,9 @@ lsnodes() {
 # list partitions (and projects)  in a human-readable format
 #
 lsparts() {
-  local BLUE="\033[34m" RESET="\033[0m"
+
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
 
   sinfo -h -o "%P|%D|%C" | awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
     {
@@ -129,42 +132,61 @@ sumjob() {
     return 1
   fi
 
-  local BLUE="\033[34m" RESET="\033[0m"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
 
-  # scontrol is the most reliable for a single job snapshot.
-  scontrol show job "$jobid" 2>/dev/null | awk \
-    -v BLUE="$BLUE" -v RESET="$RESET" '
-    {
-      for (i=1; i<=NF; i++) {
-        split($i, kv, "=")
-        if (kv[1] != "" && kv[2] != "") v[kv[1]] = kv[2]
+  # 1) Try live snapshot first
+  local live
+  live="$(scontrol show job "$jobid" 2>/dev/null)"
+  if [[ -n "$live" ]]; then
+    print -r -- "$live" | awk -v BLUE="$BLUE" -v RESET="$RESET" -v jobid="$jobid" '
+      {
+        for (i=1; i<=NF; i++) {
+          split($i, kv, "=")
+          if (kv[1] != "" && kv[2] != "") v[kv[1]] = kv[2]
+        }
       }
+      END {
+        if (!v["JobId"]) { print "Job not found: " jobid; exit 0 }
+
+        printf("%sJob:%s         %s\n", BLUE, RESET, v["JobId"])
+        if (v["JobName"])   printf("%sName:%s        %s\n", BLUE, RESET, v["JobName"])
+        if (v["UserId"])    printf("%sUser:%s        %s\n", BLUE, RESET, v["UserId"])
+        if (v["Partition"]) printf("%sPartition:%s   %s\n", BLUE, RESET, v["Partition"])
+        if (v["State"])     printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
+        if (v["Reason"])    printf("%sReason:%s      %s\n", BLUE, RESET, v["Reason"])
+
+        if (v["SubmitTime"]) printf("%sSubmitted:%s   %s\n", BLUE, RESET, v["SubmitTime"])
+        if (v["StartTime"])  printf("%sStart:%s       %s\n", BLUE, RESET, v["StartTime"])
+        if (v["RunTime"])    printf("%sRunTime:%s     %s\n", BLUE, RESET, v["RunTime"])
+        if (v["TimeLimit"])  printf("%sTimeLimit:%s   %s\n", BLUE, RESET, v["TimeLimit"])
+
+        if (v["NumNodes"])   printf("%sNodes:%s       %s\n", BLUE, RESET, v["NumNodes"])
+        if (v["NodeList"])   printf("%sNodeList:%s    %s\n", BLUE, RESET, v["NodeList"])
+
+        if (v["NumCPUs"])    printf("%sCPUs:%s        %s\n", BLUE, RESET, v["NumCPUs"])
+        if (v["ReqMem"])     printf("%sReqMem:%s      %s\n", BLUE, RESET, v["ReqMem"])
+        if (v["TRES"])       printf("%sTRES:%s        %s\n", BLUE, RESET, v["TRES"])
+        if (v["Gres"])       printf("%sGres:%s        %s\n", BLUE, RESET, v["Gres"])
+        if (v["StdOut"])     printf("%sStdOut:%s      %s\n", BLUE, RESET, v["StdOut"])
+        if (v["StdErr"])     printf("%sStdErr:%s      %s\n", BLUE, RESET, v["StdErr"])
+      }'
+    return 0
+  fi
+
+  # 2) Fallback: accounting (works for completed jobs)
+  sacct -j "$jobid" -n -X \
+    -o JobID,JobName%26,User,Partition,State,ExitCode,Elapsed,Timelimit,AllocCPUS,ReqMem,MaxRSS,NodeList%30 |
+  awk -v BLUE="$BLUE" -v RESET="$RESET" -v jobid="$jobid" '
+    BEGIN {
+      printf("%sJob (acct):%s  %s\n", BLUE, RESET, jobid)
+      printf("%-12s %-26s %-10s %-12s %-10s %-10s %-10s %-10s %-8s %-10s %-10s %s\n",
+             "JOBID","NAME","USER","PARTITION","STATE","EXIT","ELAPSED","TLIMIT","CPUS","REQMEM","MAXRSS","NODELIST")
     }
-    END {
-      if (!v["JobId"]) { print "Job not found: " ENVIRON["jobid"]; exit 0 }
-
-      printf("%sJob:%s         %s\n", BLUE, RESET, v["JobId"])
-      if (v["JobName"]) printf("%sName:%s        %s\n", BLUE, RESET, v["JobName"])
-      if (v["UserId"])  printf("%sUser:%s        %s\n", BLUE, RESET, v["UserId"])
-      if (v["Partition"]) printf("%sPartition:%s   %s\n", BLUE, RESET, v["Partition"])
-      if (v["State"])   printf("%sState:%s       %s\n", BLUE, RESET, v["State"])
-      if (v["Reason"])  printf("%sReason:%s      %s\n", BLUE, RESET, v["Reason"])
-
-      if (v["SubmitTime"]) printf("%sSubmitted:%s   %s\n", BLUE, RESET, v["SubmitTime"])
-      if (v["StartTime"])  printf("%sStart:%s       %s\n", BLUE, RESET, v["StartTime"])
-      if (v["RunTime"])    printf("%sRunTime:%s     %s\n", BLUE, RESET, v["RunTime"])
-      if (v["TimeLimit"])  printf("%sTimeLimit:%s   %s\n", BLUE, RESET, v["TimeLimit"])
-
-      if (v["NumNodes"])   printf("%sNodes:%s       %s\n", BLUE, RESET, v["NumNodes"])
-      if (v["NodeList"])   printf("%sNodeList:%s    %s\n", BLUE, RESET, v["NodeList"])
-
-      if (v["NumCPUs"])    printf("%sCPUs:%s        %s\n", BLUE, RESET, v["NumCPUs"])
-      if (v["ReqMem"])     printf("%sReqMem:%s      %s\n", BLUE, RESET, v["ReqMem"])
-      if (v["TRES"])       printf("%sTRES:%s        %s\n", BLUE, RESET, v["TRES"])
-      if (v["Gres"])       printf("%sGres:%s        %s\n", BLUE, RESET, v["Gres"])
-      if (v["StdOut"])     printf("%sStdOut:%s      %s\n", BLUE, RESET, v["StdOut"])
-      if (v["StdErr"])     printf("%sStdErr:%s      %s\n", BLUE, RESET, v["StdErr"])
-    }' jobid="$jobid"
+    NF {
+      printf("%-12s %-26s %-10s %-12s %-10s %-10s %-10s %-10s %-8s %-10s %-10s %s\n",
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    }'
 }
 
 # ---- sumnode ----
@@ -180,8 +202,8 @@ sumnode() {
     return 1
   fi
 
-  local BLUE="\033[34m"
-  local RESET="\033[0m"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
 
   scontrol show node "$node" 2>/dev/null | awk \
     -v BLUE="$BLUE" -v RESET="$RESET" '
@@ -241,7 +263,8 @@ sumpart() {
     return 1
   fi
 
-  local BLUE="\033[34m" RESET="\033[0m"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
 
   sinfo -h -p "$part" -o "%P|%l|%D|%C|%m" | awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
     {
@@ -261,4 +284,113 @@ sumpart() {
     }'
 }
 
+# --- lastjob ---
+#
+# print the job ID of the most recently recorded job for the current user.
+#
+# Typical use:
+#   lastjob
+#   seff "$(lastjob)"
+#   squeue -j "$(lastjob)"
+#   cd "$(lastjob)"
+#   
+lastjob() {
+  sacct -u "$USER" -n -X -o JobID,Submit |
+    awk '
+      $1 ~ /^[0-9]+(_[0-9]+)?$/ && $2 ~ /^[0-9]{4}-/ {
+        if ($2 > bestt) { bestt = $2; best = $1 }
+      }
+      END { if (best != "") print best }
+    '
+}
+
+# --- lsqueue ---
+#
+# List queued/running jobs (optionally for a specific user)
+#   lsqueue            # current user
+#   lsqueue alice      # another user
+#
+lsqueue() {
+  local who="${1:-$USER}"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
+
+  squeue -u "$who" -h -o "%i|%t|%P|%u|%j|%C|%m|%M|%D|%R" |
+    awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
+      BEGIN {
+        printf "%-10s %-5s %-14s %-10s %-26s %-4s %-6s %-10s %-5s %s\n",
+               "JOBID","ST","PARTITION","USER","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
+      }
+      {
+        # colorize only JOBID
+        printf "%s%-10s%s %-5s %-14s %-10s %-26.26s %-4s %-6s %-10s %-5s %s\n",
+               BLUE, $1, RESET,
+               $2, $3, $4, $5, $6, $7, $8, $9, $10
+      }'
+}
+# ---- effjob ----
+#
+# show efficiency information for a job with <jobid>
+#
+effjob() {
+  local jobid="$1"
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
+
+  if [[ -z "$jobid" ]]; then
+    echo "Usage: effjob <jobid|last|lastjob>"
+    return 1
+  fi
+
+  if [[ "$jobid" == "last" || "$jobid" == "lastjob" ]]; then
+    jobid="$(lastjob)"
+    [[ -n "$jobid" ]] || { echo "No last job found." >&2; return 1; }
+  fi
+
+  if ! command -v seff >/dev/null 2>&1; then
+    echo "seff not found in PATH."
+    return 127
+  fi
+
+  command seff "$jobid" |
+  awk -v BLUE="$BLUE" -v RESET="$RESET" '
+    {
+      line = $0
+
+      # abbreviations
+      gsub(/ core-walltime/, " (core-wt)", line)
+      gsub(/ of /, " / ", line)
+
+      # colorize left-side labels (text before first colon)
+      if (match(line, /^[[:space:]]*[^:]+:/)) {
+        label = substr(line, RSTART, RLENGTH-1)
+        rest  = substr(line, RLENGTH+1)
+        printf "%s%s%s:%s%s\n", BLUE, label, RESET, RESET, rest
+      } else {
+        print line
+      }
+    }
+  '
+}
+
+# --- lsqueue ---
+#
+# list queued/running jobs for the current user
+#
+lsqueue() {
+  local BLUE="$(_slurm_blue)"
+  local RESET="$(_slurm_reset)"
+
+  squeue -u "$USER" -h -o "%i|%t|%P|%u|%j|%C|%m|%M|%D|%R" |
+    awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
+      BEGIN {
+        printf "%-10s %-5s %-14s %-10s %-26s %-4s %-6s %-10s %-5s %s\n",
+               "JOBID","ST","PARTITION","USER","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
+      }
+      {
+        printf "%s%-10s%s %-5s %-14s %-10s %-26.26s %-4s %-6s %-10s %-5s %s\n",
+               BLUE, $1, RESET,
+               $2, $3, $4, $5, $6, $7, $8, $9, $10
+      }'
+}
 
