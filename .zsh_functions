@@ -304,30 +304,6 @@ lastjob() {
     '
 }
 
-# --- lsqueue ---
-#
-# List queued/running jobs (optionally for a specific user)
-#   lsqueue            # current user
-#   lsqueue alice      # another user
-#
-lsqueue() {
-  local who="${1:-$USER}"
-  local BLUE="$(_slurm_blue)"
-  local RESET="$(_slurm_reset)"
-
-  squeue -u "$who" -h -o "%i|%t|%P|%u|%j|%C|%m|%M|%D|%R" |
-    awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
-      BEGIN {
-        printf "%-10s %-5s %-14s %-10s %-26s %-4s %-6s %-10s %-5s %s\n",
-               "JOBID","ST","PARTITION","USER","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
-      }
-      {
-        # colorize only JOBID
-        printf "%s%-10s%s %-5s %-14s %-10s %-26.26s %-4s %-6s %-10s %-5s %s\n",
-               BLUE, $1, RESET,
-               $2, $3, $4, $5, $6, $7, $8, $9, $10
-      }'
-}
 # ---- effjob ----
 #
 # show efficiency information for a job with <jobid>
