@@ -65,10 +65,11 @@ alias ipi='ipconfig getifaddr en0'
 # ls
 # --------------------------------------------------
 
-alias l='ls -F --color'
-alias ls='ls -F'
-alias ll='ls -lhF --color'
-alias la='ls -alhF --color'
+alias ls='ls -F --color=auto --group-directories-first'
+alias l='ls'
+alias lt='ls -Fth --color=auto --group-directories-first'
+alias ll='ls -lhFt --color=auto --group-directories-first'
+alias la='ls -alhFt --color=auto --group-directories-first'
 
 # --------------------------------------------------
 # mv

@@ -349,24 +349,27 @@ effjob() {
   '
 }
 
-# --- lsqueue ---
-#
-# list queued/running jobs for the current user
-#
-lsqueue() {
-  local BLUE="$(_slurm_blue)"
-  local RESET="$(_slurm_reset)"
+# convert seconds in a human-readable format (e.g. 1d 02h 03m 04s)
+sec2human() {
+  : "${1:?seconds required}"
 
-  squeue -u "$USER" -h -o "%i|%t|%P|%u|%j|%C|%m|%M|%D|%R" |
-    awk -F'|' -v BLUE="$BLUE" -v RESET="$RESET" '
-      BEGIN {
-        printf "%-10s %-5s %-14s %-10s %-26s %-4s %-6s %-10s %-5s %s\n",
-               "JOBID","ST","PARTITION","USER","NAME","CPU","MEM","TIME","NODES","WHERE/REASON"
-      }
-      {
-        printf "%s%-10s%s %-5s %-14s %-10s %-26.26s %-4s %-6s %-10s %-5s %s\n",
-               BLUE, $1, RESET,
-               $2, $3, $4, $5, $6, $7, $8, $9, $10
-      }'
+  local s=$1 d h m
+  (( d = s / 86400,
+     h = s / 3600 % 24,
+     m = s / 60 % 60,
+     s %= 60 ))
+
+  if (( d > 0 )); then
+    printf '%dd %02dh %02dm %02ds' "$d" "$h" "$m" "$s"
+  elif (( h > 0 )); then
+    printf '%02dh %02dm %02ds' "$h" "$m" "$s"
+  elif (( m > 0 )); then
+    printf '%02dm %02ds' "$m" "$s"
+  else
+    printf '%02ds' "$s"
+  fi
+
+  # if printing to a terminal, add newline (prevents zsh's trailing '%' marker)
+  [[ -t 1 ]] && printf '\n'
 }
 
