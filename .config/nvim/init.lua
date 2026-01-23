@@ -146,24 +146,22 @@ require("lazy").setup({
 	-- GitHub Copilot
 	{ "github/copilot.vim", lazy = false, enabled = FALSE},  -- disabled
 
--- in your lazy.nvim plugin spec
---
-{
-  "jalvesaq/Nvim-R",
-  ft = { "r", "rmd", "quarto" },
+  -- NVim-R (old school)
+    { "jalvesaq/Nvim-R",
+      ft = { "r", "rmd", "quarto" },
 
-  -- v0.9.11 (has R_tmux_split)
-  commit = "4e9981e",
+      -- pin to old verion v0.9.11 (has R_tmux_split)
+      commit = "4e9981e",
 
-  config = function()
-    vim.g.R_in_buffer = 0
-    vim.g.R_tmux_split = 1
+      config = function()
+        vim.g.R_in_buffer = 0
+        vim.g.R_tmux_split = 1
 
-    vim.keymap.set("n", "<localleader>rf", "<Plug>RStart", { remap = true, silent = true })
-    vim.keymap.set("n", "<Space>", "<Plug>RDSendLine", { remap = true, silent = true })
-    vim.keymap.set("v", "<Space>", "<Plug>RDSendSelection", { remap = true, silent = true })
-  end,
-},
+        vim.keymap.set("n", "<localleader>rf", "<Plug>RStart", { remap = true, silent = true })
+        vim.keymap.set("n", "<Space>", "<Plug>RDSendLine", { remap = true, silent = true })
+        vim.keymap.set("v", "<Space>", "<Plug>RDSendSelection", { remap = true, silent = true })
+      end,
+    },
 
    ----Latex
     --{
