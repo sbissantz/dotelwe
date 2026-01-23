@@ -1,4 +1,4 @@
--- Bootstrap lazy.nvim
+-- bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
   local lazyrepo = "https://github.com/folke/lazy.nvim.git"
@@ -15,16 +15,28 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
--- Make sure to setup `mapleader` and `maplocalleader` before
+-- make sure to setup `mapleader` and `maplocalleader` before
 -- loading lazy.nvim so that mappings are correct.
 -- This is also a good place to setup other settings (vim.opt)
 
--- Map leaders first
+-- ================================
+-- keymap and leader settings
+-- ================================
+
+-- map leaders first
 vim.g.mapleader = ";"        -- main leader key
 vim.g.maplocalleader = ","  -- local leader key
 
+-- toggle between dark/light with <leader>tb
+vim.keymap.set("n", "<leader>tb", function()
+  vim.o.background = (vim.o.background == "dark") and "light" or "dark"
+  pcall(function()
+    require("lualine").refresh()
+  end)
+end, { desc = "Toggle background (light/dark)" })
+
 -- ================================
--- General Editing Settings
+-- general editing settings
 -- ================================
 vim.opt.ignorecase = true                -- searches are case-insensitive
 vim.opt.hlsearch = true                  -- highlight all search matches
@@ -41,18 +53,18 @@ vim.opt.colorcolumn = "80"               -- show a vertical line at 80 chars
 vim.opt.spelllang = { "en_us", "de_de" } -- spell checking languages
 
 -- ================================
--- Filetype & Syntax
+-- filetype & syntax
 -- ================================
 vim.cmd("filetype plugin indent on")        -- enable filetype detection and indentation
 vim.cmd("syntax on")                        -- enable syntax highlighting
 
 -- ================================
--- Command-line & Completion
+-- command-line & completion
 -- ================================
 vim.opt.wildmode = { "longest", "list" }   -- bash-like tab completions
 
 -- ================================
--- Optional / Visual Enhancements
+-- optional / visual enhancements
 -- ================================
 vim.opt.showmatch = true                     -- highlight matching brackets
 -- vim.opt.compatible = false                -- unnecessary in Neovim; always off
@@ -82,33 +94,36 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
--- Setup lazy.nvim
+-- ================================
+-- plug-in manager (lazy nvim)
+-- ================================
+
 require("lazy").setup({
   spec = {
 
     -- Colorscheme
-      {
-        "wtfox/jellybeans.nvim",
-        lazy = false,
-        priority = 1000,
-        config = function()
-          local hour = tonumber(os.date("%H"))
-          if hour >= 8 and hour < 17 then
-            vim.cmd("colorscheme jellybeans-muted-light")
-          else
-            vim.cmd("colorscheme jellybeans-muted")
-          end
-        end,
+    { "wtfox/jellybeans.nvim", 
+      lazy = false,
+      priority = 1100,
+      opts = {
+        transparent = false,
+        italics = true,
+        bold = true,
+        flat_ui = true,
+        background = {
+          dark = "jellybeans",
+          light = "jellybeans_light",
+        },
+        plugins = {
+          all = false,
+          auto = true,
+        },
       },
-
-    -- Colorscheme (old)
-    --{ "rafi/awesome-vim-colorschemes", 
-      --lazy = false,
-      --init = function() 
-        ---- Set the colorscheme to jellybeans
-        --vim.cmd("colorscheme jellybeans") 
-      --end 
-    --} ,
+      config = function(_, opts)
+        require("jellybeans").setup(opts)
+        vim.cmd.colorscheme("jellybeans")
+      end,
+    },
     
     -- Comment quickly
     { "preservim/nerdcommenter", lazy = false },
