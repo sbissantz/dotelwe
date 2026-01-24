@@ -146,7 +146,8 @@ require("lazy").setup({
 	-- GitHub Copilot
 	{ "github/copilot.vim", lazy = false, enabled = false},  -- disabled
 
-  -- NVim-R (old school)
+    -- NVim-R (old school)
+    -- important: does only work under R 4.4 (so module load R/4.4)
     { "jalvesaq/Nvim-R",
       ft = { "r", "rmd", "quarto" },
 
