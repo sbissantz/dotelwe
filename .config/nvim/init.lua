@@ -144,7 +144,7 @@ require("lazy").setup({
     { "sheerun/vim-polyglot" },
 
 	-- GitHub Copilot
-	{ "github/copilot.vim", lazy = false, enabled = FALSE},  -- disabled
+	{ "github/copilot.vim", lazy = false, enabled = false},  -- disabled
 
   -- NVim-R (old school)
     { "jalvesaq/Nvim-R",
