@@ -5,14 +5,6 @@
 # read by login shells (sh, bash, zsh -l) and sometimes by batch systems
 
 # --------------------------------------------------
-# locale
-# --------------------------------------------------
-# use a safe default locale only if none is set
-: "${LANG:=C}"
-: "${LC_ALL:=C}"
-export LANG LC_ALL
-
-# --------------------------------------------------
 # preferred interactive shell
 # --------------------------------------------------
 # exec zsh if available and not already running
