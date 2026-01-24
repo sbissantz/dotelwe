@@ -107,6 +107,12 @@ fi
 # tmux auto-attach (last!)
 # --------------------------------------------------
 
+# --- tmux socket dir (avoid /tmp issues on HPC nodes) ---
+export TMUX_TMPDIR="$HOME/.tmux"
+mkdir -p "$TMUX_TMPDIR"
+chmod 700 "$TMUX_TMPDIR"
+
+# --- auto-attach tmux session "elwe" on SSH (never nest) ---
 if [[ -z "$TMUX" ]] && [[ -n "$SSH_CONNECTION" ]]; then
     tmux attach -t elwe || tmux new -s elwe
 fi
