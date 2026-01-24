@@ -1,7 +1,16 @@
-R_USER=${HOME}
-R_PROFILE_USER=${R_USER}/.R/Rprofile
+################
+# ~/.Renviron  #
+################
+
 R_ENVIRON_USER=${R_USER}/.R/.Renviron
-# Specifiers "%v" and "%p" to host multiple R versions
-# See: /setups/R-setup (.Renviron)
-# R_LIBS_USER=${R_USER}/Rlibs/%v
-R_HISTFILE=${R_USER}/.R/Rhistory
+
+R_PROFILE_USER=${HOME}/.R/Rprofile
+R_HISTFILE=${HOME}/.R/Rhistory
+
+# Per-version user library (recommended)
+R_LIBS_USER=${HOME}/R/%p-library/%v
+
+# Locale (prevents nvimcom omnils failures)
+LANG=C.UTF-8
+LC_ALL=C.UTF-8
+LC_CTYPE=C.UTF-8
