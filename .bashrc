@@ -5,7 +5,6 @@
 # non-login interactive shells source this file
 # login shells should source ~/.bash_profile
 
-
 # --------------------------------------------------
 #  interactive shell guard
 # --------------------------------------------------
@@ -52,7 +51,17 @@ fi
 # --------------------------------------------------
 # dotfiles (bare git repo)
 # --------------------------------------------------
-alias dotfiles='/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME'
+
+# dotfiles: git wrapper
+dotfiles() { /usr/bin/git --git-dir="$HOME/.dotfiles" --work-tree="$HOME" "$@"; }
+
+# dotfiles: git-style tab completion (git completion already loaded)
+if declare -F __git_complete >/dev/null 2>&1; then
+  if ! declare -F _dotfiles_complete >/dev/null 2>&1; then
+    _dotfiles_complete() { GIT_DIR="$HOME/.dotfiles" GIT_WORK_TREE="$HOME" __git_main; }
+  fi
+  __git_complete dotfiles _dotfiles_complete
+fi
 
 # --------------------------------------------------
 # persistent ssh-agent (login nodes only)
@@ -104,4 +113,19 @@ if [[ -n "$SSH_CONNECTION" ]]; then
         tmux attach -t elwe || tmux new -s elwe
     fi
 fi
+
+# -----------------------------------------------------------------------
+# filename expansion & tab completion (interactive safety)
+# -----------------------------------------------------------------------
+
+# safer globbing: fail if a pattern matches nothing
+shopt -s failglob
+
+# enable recursive globbing with **
+shopt -s globstar
+
+# improve tab completion behavior
+bind 'set completion-ignore-case on'
+bind 'set show-all-if-ambiguous on'
+bind 'TAB:menu-complete'
 
