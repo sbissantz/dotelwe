@@ -10,13 +10,10 @@
 # Keep...
 !.bash_profile
 !.bashrc
-!.profile
+!.bash_aliases
+!.bash_functions
+
 !.vimrc
-!.zsh_functions
-!.zsh_completions
-!.zsh_aliases
-!.zprofile
-!.zshrc
 
 !.config/
 !.config/nvim/
