@@ -1,17 +1,17 @@
 -- bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
-  local lazyrepo = "https://github.com/folke/lazy.nvim.git"
-  local out = vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", lazyrepo, lazypath })
-  if vim.v.shell_error ~= 0 then
-    vim.api.nvim_echo({
-      { "Failed to clone lazy.nvim:\n", "ErrorMsg" },
-      { out, "WarningMsg" },
-      { "\nPress any key to exit..." },
-    }, true, {})
-    vim.fn.getchar()
-    os.exit(1)
-  end
+local lazyrepo = "https://github.com/folke/lazy.nvim.git"
+local out = vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", lazyrepo, lazypath })
+if vim.v.shell_error ~= 0 then
+  vim.api.nvim_echo({
+    { "Failed to clone lazy.nvim:\n", "ErrorMsg" },
+    { out, "WarningMsg" },
+    { "\nPress any key to exit..." },
+  }, true, {})
+  vim.fn.getchar()
+  os.exit(1)
+end
 end
 vim.opt.rtp:prepend(lazypath)
 
@@ -29,10 +29,10 @@ vim.g.maplocalleader = ","  -- local leader key
 
 -- toggle between dark/light with <leader>tb
 vim.keymap.set("n", "<leader>tb", function()
-  vim.o.background = (vim.o.background == "dark") and "light" or "dark"
-  pcall(function()
-    require("lualine").refresh()
-  end)
+vim.o.background = (vim.o.background == "dark") and "light" or "dark"
+pcall(function()
+  require("lualine").refresh()
+end)
 end, { desc = "Toggle background (light/dark)" })
 
 -- ================================
@@ -69,192 +69,99 @@ vim.opt.wildmode = { "longest", "list" }   -- bash-like tab completions
 vim.opt.showmatch = true                     -- highlight matching brackets
 -- vim.opt.compatible = false                -- unnecessary in Neovim; always off
 
--- osc52 clipboard fallback for neovim 0.8
-
-local function osc52_copy(lines)
-  local text = table.concat(lines, "\n")
-  local encoded = vim.fn.system(
-    "printf %s " .. vim.fn.shellescape(text) .. " | base64 | tr -d '\n'"
-  )
-  local osc52 = string.format("\027]52;c;%s\007", encoded)
-  vim.api.nvim_chan_send(vim.v.stderr, osc52)
-end
-
--- send yanks to system clipboard, keep vim registers intact
-vim.api.nvim_create_autocmd("TextYankPost", {
-  callback = function()
-    if vim.v.event.operator ~= "y" then
-      return
-    end
-    local lines = vim.v.event.regcontents
-    if not lines or #lines == 0 then
-      return
-    end
-    osc52_copy(lines)
-  end,
-})
-
 -- ================================
 -- plug-in manager (lazy nvim)
 -- ================================
 
 require("lazy").setup({
-  spec = {
+spec = {
 
-    -- Colorscheme
-    { "wtfox/jellybeans.nvim", 
-      lazy = false,
-      priority = 1100,
-      opts = {
-        transparent = false,
-        italics = true,
-        bold = true,
-        flat_ui = true,
-        background = {
-          dark = "jellybeans",
-          light = "jellybeans_light",
-        },
-        plugins = {
-          all = false,
-          auto = true,
-        },
+  -- Colorscheme
+  { "wtfox/jellybeans.nvim", 
+    lazy = false,
+    priority = 1100,
+    opts = {
+      transparent = false,
+      italics = true,
+      bold = true,
+      flat_ui = true,
+      background = {
+        dark = "jellybeans",
+        light = "jellybeans_light",
       },
-      config = function(_, opts)
-        require("jellybeans").setup(opts)
-        vim.cmd.colorscheme("jellybeans")
-      end,
+      plugins = {
+        all = false,
+        auto = true,
+      },
     },
-    
-    -- Comment quickly
-    { "preservim/nerdcommenter", lazy = false },
+    config = function(_, opts)
+      require("jellybeans").setup(opts)
+      vim.cmd.colorscheme("jellybeans")
+    end,
+  },
 
-    -- Surround quickly
-    { "tpope/vim-surround", lazy = false },
+  -- osc52 clipboard integration 
+  -- Normal yanks (`y`) stay local on the remote machine
+  -- <leader> y: in visual mode copies selection to the macOS clipboard
+  -- <leader> y: in normal mode copies entire buffer to the macOS clipboard
+  { "ojroques/nvim-osc52",
+    config = function()
+      local osc52 = require("osc52")
+      osc52.setup({ max_length = 0, silent = true, trim = false })
 
-    -- Parenthesis matching
-    { "jiangmiao/auto-pairs"},
+      -- Visual select → ;y
+      vim.keymap.set("v", "<leader>y", osc52.copy_visual, { desc = "OSC52 copy selection" })
 
-    -- Grammar and spelling
-    { "rhysd/vim-grammarous"},
+      -- Whole file → ;Y
+      vim.keymap.set("n", "<leader>Y", function()
+        local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+        osc52.copy(table.concat(lines, "\n"))
+      end, { desc = "OSC52 copy whole file" })
+    end,
+  },
 
-    -- Stan syntax highlighting
-    { "eigenfoo/stan-vim" },
+  -- comment quickly
+  { "preservim/nerdcommenter", lazy = false },
 
-    -- Better syntax support
-    { "sheerun/vim-polyglot" },
+  -- surround quickly
+  { "tpope/vim-surround", lazy = false },
 
-	-- GitHub Copilot
-	{ "github/copilot.vim", lazy = false, enabled = false},  -- disabled
+  -- parenthesis matching
+  { "jiangmiao/auto-pairs"},
 
-    -- NVim-R (old school)
-    -- important: does only work under R 4.4 (so module load R/4.4)
-    { "jalvesaq/Nvim-R",
-      ft = { "r", "rmd", "quarto" },
+  -- grammar and spelling
+  { "rhysd/vim-grammarous"},
 
-      -- pin to old verion v0.9.11 (has R_tmux_split)
-      commit = "4e9981e",
+  -- stan syntax highlighting
+  { "eigenfoo/stan-vim" },
 
-      config = function()
-        vim.g.R_in_buffer = 0
-        vim.g.R_tmux_split = 1
+  -- better syntax support
+  { "sheerun/vim-polyglot" },
 
-        vim.keymap.set("n", "<localleader>rf", "<Plug>RStart", { remap = true, silent = true })
-        vim.keymap.set("n", "<Space>", "<Plug>RDSendLine", { remap = true, silent = true })
-        vim.keymap.set("v", "<Space>", "<Plug>RDSendSelection", { remap = true, silent = true })
-      end,
-    },
+  -- github copilot 
+  { "github/copilot.vim", lazy = false, enabled = false},  -- disabled
 
-   ----Latex
-    --{
-      --"lervag/vimtex",
-      --enabled = false,        -- disabled
-      --lazy = false,
-      --init = function ()
-        --vim.g.vimtex_compiler_latexmk_engines = {
-          --_ = "-xelatex", -- use xelatex as the default engine
-          ----_ = "-pdf -pdflatex=pdflatex" 
-          ----_ = "-lualatex", 
-        --}
-        ----vim.g.vimtex_view_method = "skim"
-        --vim.g.vimtex_syntax_enabled = 0
-      --end
-    --},
+  -- NVim-R (old school)
+  -- important: does only work under R 4.4 (so module load R/4.4)
+  { "jalvesaq/Nvim-R",
+    ft = { "r", "rmd", "quarto" },
 
-    ---- R programming 
-    --{ "R-nvim/R.nvim",
-    --enabled = false, -- disabled 
-     ---- Only required if you also set defaults.lazy = true 
-    --lazy = false,
-    ---- R.nvim is still young and we may make some breaking changes from time
-    ---- to time (but also bug fixes all the time). If configuration stability
-    ---- is a high priority for you, pin to the latest minor version, but unpin
-    ---- it and try the latest version before reporting an issue:
-    ---- version = "~0.1.0"
-    --config = function()
-        ---- Create a table with the options to be passed to setup()
-        -----@type RConfigUserOpts
-        --local opts = {
-            --hook = {
-                --on_filetype = function()
-                    --vim.api.nvim_buf_set_keymap(0, "n", "<Enter>", "<Plug>RDSendLine", {})
-                    --vim.api.nvim_buf_set_keymap(0, "v", "<Enter>", "<Plug>RSendSelection", {})
-                --end
-            --},
-            --R_args = {"--quiet", "--no-save"},
-            --min_editor_width = 72,
-            --rconsole_width = 78,
-            --objbr_mappings = { -- Object browser keymap
-                --c = 'class', -- Call R functions
-                --['<localleader>gg'] = 'head({object}, n = 15)', -- Use {object} notation to write arbitrary R code.
-                --v = function()
-                    ---- Run lua functions
-                    --require('r.browser').toggle_view()
-                --end
-            --},
-            --disable_cmds = {
-                --"RClearConsole",
-                --"RCustomStart",
-                --"RSPlot",
-                --"RSaveClose",
-            --},
-        --}
-        ---- Check if the environment variable "R_AUTO_START" exists.
-        ---- If using fish shell, you could put in your config.fish:
-        ---- alias r "R_AUTO_START=true nvim"
-        --if vim.env.R_AUTO_START == "true" then
-            --opts.auto_start = "on startup"
-            --opts.objbr_auto_start = true
-        --end
-        --require("r").setup(opts)
-    --end,
-    --},
+    -- pin to old verion v0.9.11 (has R_tmux_split)
+    commit = "4e9981e",
 
-    ---- R completion
-    --{ "R-nvim/cmp-r",
-      --{
-          --"hrsh7th/nvim-cmp",
-          --config = function()
-              --require("cmp").setup({ sources = {{ name = "cmp_r" }}})
-              --require("cmp_r").setup({})
-          --end,
-      --},
-    --},
-    ---- R syntax highlighting
-    --{ "nvim-treesitter/nvim-treesitter",
-    --version = "v0.9.2",      -- pin to a version compatible with nvim 0.8
-    --build = ":TSUpdate",     -- lazy.nvim uses 'build', not 'run'
-    --config = function ()
-        --require("nvim-treesitter.configs").setup({
-            --ensure_installed = { "markdown", "markdown_inline", "r", "rnoweb",
-            --"yaml", "latex", "csv" },
-            --highlight = { enable = true },
-        --})
-    --end
-  --},
+    config = function()
+      vim.g.R_in_buffer = 0
+      vim.g.R_tmux_split = 1
+
+      vim.keymap.set("n", "<localleader>rf", "<Plug>RStart", { remap = true, silent = true })
+      vim.keymap.set("n", "<Space>", "<Plug>RDSendLine", { remap = true, silent = true })
+      vim.keymap.set("v", "<Space>", "<Plug>RDSendSelection", { remap = true, silent = true })
+    end,
+  },
 },
-  -- Configure any other settings here. See the documentation for more details.
-  -- colorscheme that will be used when installing plugins.
-  install = { colorscheme = { "habamax" } },
-  -- automatically check for plugin updates
-  checker = { enabled = true },
+-- Configure any other settings here. See the documentation for more details.
+-- colorscheme that will be used when installing plugins.
+install = { colorscheme = { "habamax" } },
+-- automatically check for plugin updates
+checker = { enabled = true },
 })
