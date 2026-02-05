@@ -40,7 +40,6 @@ SNAPSHOT_ITEMS=(
 
 # threading policy (script-owned)
 NUM_THREADS=1
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # general helper functions 
@@ -82,11 +81,6 @@ JOB_FILE="${JOBINFO_DIR}/job.txt"
 RUN_FILE="${RUNINFO_DIR}/run.txt"
 ENV_FILE="${RUNINFO_DIR}/env.txt"
 
-# ': > file'   creates if missing, clears existing (status files)
-# 'touch file' creates if missing; preserves existing (log files)
-: > "${STATUS_FILE}"
-touch "${OS_FILE}" "${JOB_FILE}" "${RUN_FILE}" "${ENV_FILE}"
-
 # ------------------------------------------------------------------------------
 # run status and traps 
 # ------------------------------------------------------------------------------
@@ -98,11 +92,32 @@ set_final_status() {
   cur="$(cat "${STATUS_FILE}" 2>/dev/null || true)"
   [[ "${cur}" == "RUNNING" ]] && echo "${new}" > "${STATUS_FILE}"
 }
+on_timeout() {
+  set_final_status "TIMEOUT"
+  log WARN "STATUS=TIMEOUT (USR1: nearing walltime)"
+  exit 99
+}
+on_kill() {
+  set_final_status "KILLED"
+  log WARN "STATUS=KILLED (termination signal)"
+  exit 143
+}
+on_err() {
+  set_final_status "FAILED"
+  log ERROR "STATUS=FAILED (line ${LINENO}: ${BASH_COMMAND})"
+}
+on_exit() {
+  local rc=$?
+  local dur="${SECONDS}"
 
-on_timeout(){ set_final_status "TIMEOUT"; log WARN "STATUS=TIMEOUT (USR1: nearing walltime)"; exit 99; }
-on_kill(){ set_final_status "KILLED"; log WARN "STATUS=KILLED (termination signal)"; exit 143; }
-on_err(){ set_final_status "FAILED"; log ERROR "STATUS=FAILED (line ${LINENO}: ${BASH_COMMAND})"; }
-on_exit(){ local rc=$?; if [[ ${rc} -eq 0 ]]; then set_final_status "OK"; log INFO "STATUS=OK"; fi; }
+  printf 'END_TIME=%s\n' "$(date -Is)" >> "${RUN_FILE}"
+  printf 'DURATION_SEC=%s\n' "${dur}" >> "${RUN_FILE}"
+
+  if [[ ${rc} -eq 0 ]]; then
+    set_final_status "OK"
+    log INFO "STATUS=OK"
+  fi
+}
 
 trap on_timeout USR1
 trap on_kill TERM INT
@@ -204,9 +219,11 @@ fi
 # ------------------------------------------------------------------------------
 # payload
 # ------------------------------------------------------------------------------
+SECONDS=0   # reset: track runtime from here 
+
 log INFO "start: payload"
 srun Rscript "${PROJECT_ROOT}/${ENTRYPOINT}"
-log INFO "finish: payload"
+log INFO "finish: payload (${SECONDS}s)"
 
 # In your R script:
 # writeLines(capture.output(sessionInfo()),
