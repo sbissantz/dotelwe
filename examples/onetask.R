@@ -31,16 +31,10 @@ log("STEP", "fetch environment variables")
 
 # character-valued (paths, identifiers)
 env_chr <- list(
-  #project_name = "PROJECT_NAME",
-  #job_id       = "SLURM_JOB_ID",
-  #submit_dir   = "SLURM_SUBMIT_DIR",   # project root
-  data_dir     = "DATA_DIR",
-  stan_dir     = "STAN_DIR",
-  #job_dir      = "JOB_DIR",
-  #job_dir_id   = "JOB_DIR_ID",
-  result_dir   = "RESULT_DIR",
-  runinfo_dir   = "RUNINFO_DIR"
-  #snapshot_dir = "SNAPSHOT_DIR"
+  data_dir = "DATA_DIR",
+  stan_dir = "STAN_DIR",
+  result_dir = "RESULT_DIR",
+  provenance_dir = "PROVENANCE_DIR"
 )
 
 ## integer-valued (resources, topology)
@@ -68,10 +62,8 @@ for (k in c(envars_chr, envars_int)) {
 # build environment scaffold
 # -----------------------------------------------------------------------------
 
-env <- c(
-  as.list(vapply(env_chr, Sys.getenv, FUN.VALUE = character(1))),
-  as.list(vapply(env_int, Sys.getenv, FUN.VALUE = character(1)))
-)
+env <- c( as.list(vapply(env_chr, Sys.getenv, FUN.VALUE = character(1))), 
+         as.list(vapply(env_int, Sys.getenv, FUN.VALUE = character(1))))
 
 # missingness check
 stopifnot(all(nzchar(unlist(env))))
@@ -116,7 +108,7 @@ log("STEP", "snapshot session info")
 
 writeLines(
   capture.output(utils::sessionInfo()),
-  file.path(runinfo_dir, "rsessioninfo.txt")
+  file.path(provenance_dir, "rsessioninfo.txt")
 )
 
 # =============================================================================

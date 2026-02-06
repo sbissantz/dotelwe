@@ -35,8 +35,9 @@ MODULES=(
 
 # snapshot: if non-empty, saves a copy once per job (relative to PROJECT_ROOT) 
 SNAPSHOT_ITEMS=(
-  "R"       # directory
-  "stan"    # directory
+  "onetask.sh"  # script file (recommended)
+  "R"           # important: don't use "dir/" for directories, use "dir"
+  "stan"        # directory
   # "config/settings.yaml"    # file
 )
 
@@ -65,22 +66,24 @@ JOB_ID="${SLURM_JOB_ID}"
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
 RUN_DIR="${JOB_ROOT}"
 
-JOBINFO_DIR="${JOB_ROOT}/jobinfo"
+PROVENANCE_DIR="${JOB_ROOT}/provenance"
 SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
 
-RUNINFO_DIR="${RUN_DIR}/runinfo"
 RESULT_DIR="${RUN_DIR}/results"
 
-mkdir -p "${RUN_DIR}" "${JOBINFO_DIR}" "${SNAPSHOT_DIR}" "${RUNINFO_DIR}" "${RESULT_DIR}"
+mkdir -p "${RUN_DIR}" "${PROVENANCE_DIR}" "${SNAPSHOT_DIR}" "${RESULT_DIR}"
 
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
-STATUS_FILE="${RUN_DIR}/STATUS"
+PLATFORM_FILE="${PROVENANCE_DIR}/platform.txt"
+JOB_FILE="${PROVENANCE_DIR}/job.txt"
+RUN_FILE="${PROVENANCE_DIR}/run.txt"
+ENV_FILE="${PROVENANCE_DIR}/env.txt"
+SCRIPT_FILE="${PROVENANCE_DIR}/env.txt"
+# TODO: test
+SUBMIT_FILE="${PROVENANCE_DIR}/submit.sh"
 
-OS_FILE="${JOBINFO_DIR}/os.txt"
-JOB_FILE="${JOBINFO_DIR}/job.txt"
-RUN_FILE="${RUNINFO_DIR}/run.txt"
-ENV_FILE="${RUNINFO_DIR}/env.txt"
+STATUS_FILE="${RUN_DIR}/STATUS"
 
 # ==============================================================================
 log STEP "install status tracking and traps"
@@ -134,7 +137,7 @@ done
 # ==============================================================================
 log STEP "configure runtime environment"
 # ==============================================================================
-export RUN_DIR RUNINFO_DIR RESULT_DIR
+export PROVENANCE_DIR RESULT_DIR RUN_DIR 
 
 # threading policy for all of them (often: THREADS=1)
 THREAD_VARS=(
@@ -157,7 +160,7 @@ for d in "${INPUT_DIRS[@]}"; do
   export "${var}=${PROJECT_ROOT}/${d}"
 done
 
-log_export RUN_DIR RUNINFO_DIR RESULT_DIR
+log_export PROVENANCE_DIR RESULT_DIR RUN_DIR 
 log_export "${THREAD_VARS[@]}"
 log_export "${INPUT_VARS[@]}"
 
@@ -178,23 +181,36 @@ log STEP "snapshot specified items"
 # ==============================================================================
 for item in "${SNAPSHOT_ITEMS[@]}"; do
   src="${PROJECT_ROOT}/${item}"
+
   if [[ ! -e "${src}" ]]; then
-    # snapshot is best-effort (provenance only); never fails job
     log WARN "snapshot: missing item (skipping): ${item}"
     continue
   fi
-  rsync -a -- "${src}/" "${SNAPSHOT_DIR}/${item}/" 2>/dev/null \
-    || cp -a -- "${src}" "${SNAPSHOT_DIR}/${item}"
+
+  rsync -a -- "${src}" "${SNAPSHOT_DIR}/" \
+    || log WARN "snapshot: rsync failed for: ${item}"
 done
 
 # ==============================================================================
 log STEP "capture metadata"
 # ==============================================================================
 {
-  # kernel and distro
-  uname -srm
-  ( . /etc/os-release 2>/dev/null && printf '%s %s\n' "${ID}" "${VERSION_ID}" ) || true
-} > "${OS_FILE}"
+  echo "Kernel: $(uname -srm)"
+
+  if [[ -r /etc/os-release ]]; then
+    . /etc/os-release
+    echo "OS: ${PRETTY_NAME}"
+  fi
+
+  if command -v lscpu >/dev/null 2>&1; then
+    lscpu | awk -F: '
+      $1=="Architecture" { gsub(/^[ \t]+/, "", $2); print "Arch: " $2 }
+      $1=="CPU(s)"       { gsub(/^[ \t]+/, "", $2); print "CPU(s): " $2 }
+      $1=="Vendor ID"    { gsub(/^[ \t]+/, "", $2); print "Vendor: " $2 }
+      $1=="Model name"   { gsub(/^[ \t]+/, "", $2); print "Model: " $2 }
+    '
+  fi
+} > "${PLATFORM_FILE}"
 
 {
   # job: scheduler view 
