@@ -8,14 +8,20 @@
 # =============================================================================
 # initialize general helper functions
 # =============================================================================
-log <- function(level, ..., .sep = " ", .file = stdout()) {
-  ts <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")
-  msg <- paste(..., sep = .sep)
-  cat(sprintf("[%s] %-5s %s\n", ts, level, msg), file = .file)
+log <- function(level, ..., sep = " ", file = stdout()) {
+  t <- proc.time()[["elapsed"]]
+  if (t < 60) {
+    ts <- sprintf("%.1fs", t)
+  } else if (t < 3600) {
+    ts <- sprintf("%.1fm", t / 60)
+  } else {
+    ts <- sprintf("%.2fh", t / 3600)
+  }
+  cat(sprintf("[+%s] %-5s %s\n", ts, level, paste(..., sep = sep)), file = file)
 }
 
 # =============================================================================
-log("STEP", "start R session")
+log("STEP", "====== start R session ======")
 # =============================================================================
 
 # =============================================================================
@@ -33,7 +39,7 @@ env_chr <- list(
   #job_dir      = "JOB_DIR",
   #job_dir_id   = "JOB_DIR_ID",
   result_dir   = "RESULT_DIR",
-  runinfo_dir   = "RUNINFO_DIR",
+  runinfo_dir   = "RUNINFO_DIR"
   #snapshot_dir = "SNAPSHOT_DIR"
 )
 
@@ -55,7 +61,7 @@ envars_int <- unname(env_int)
 
 # raw environment audit (debug)
 for (k in c(envars_chr, envars_int)) {
-  log("INFO", sprintf("  fetch: %s=%s", k, Sys.getenv(k)))
+  log("INFO", sprintf("fetch: %s=%s", k, Sys.getenv(k)))
 }
 
 # -----------------------------------------------------------------------------
@@ -101,7 +107,7 @@ env_nms <- names(env)
 list2env(env, envir = environment())
 
 for (nm in env_nms) {
-  log("INFO", sprintf("  runtime: %s=%s", nm, get(nm)))
+  log("INFO", sprintf("runtime: %s=%s", nm, get(nm)))
 }
 
 # =============================================================================
@@ -121,7 +127,7 @@ pkgs <- c("posterior", "cmdstanr")
 lapply(pkgs, library, character.only = TRUE)
 
 # =============================================================================
-log("STEP", "start payload")
+log("STEP", "start analysis")
 # =============================================================================
 
 ### --- input(s) ---
@@ -247,5 +253,5 @@ log("STEP", "start payload")
 ## fit_md2polsi <- readRDS("fit_md2polsi.rds")
 
 # =============================================================================
-log("STEP", "close R session")
+log("STEP", "===== close R session =====")
 # =============================================================================
