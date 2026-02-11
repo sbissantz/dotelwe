@@ -4,11 +4,6 @@
 ## invoked by `combitask.sh`. consumes environment variables exported by slurm,
 ## configures runtime constants, snapshots session info, and runs payload code. 
 ## ============================================================================
-options(error = function() {
-  message("FATAL: unhandled R error")
-  traceback(2)
-  quit(status = 1, save = "no")
-})
 
 # =============================================================================
 # helper logging 

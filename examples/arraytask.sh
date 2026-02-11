@@ -20,7 +20,7 @@ set -eEuo pipefail
 # ==============================================================================
 # user config 
 # ==============================================================================
-PROJECT_NAME="demo_onetask"
+PROJECT_NAME="arraytask"
 
 # specify directories that live in the project root
 INPUT_DIRS=(
@@ -92,8 +92,10 @@ mkdir -p \
 "${TASK_PROVENANCE_DIR}" \
 "${RESULT_DIR}"
 
+# convenience link: jobs/lastjob to jobs/<JOB_ID>
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
+# switch to run directory (so relative outputs are per-task by default)
 cd "${RUN_DIR}"
 
 PLATFORM_FILE="${JOB_PROVENANCE_DIR}/platform.txt"     # once per job
@@ -112,6 +114,10 @@ JOB_LOCK="${JOB_PROVENANCE_DIR}/.written"
 # finish payload command (note: [first] entrypoint only '[0]')
 PAYLOAD_CMD=("${PAYLOAD_PREFIX[@]}")
 PAYLOAD_CMD+=("${PROJECT_ROOT}/${ENTRYPOINT[0]}")
+
+log INFO "JOB_ID=${JOB_ID}"
+log INFO "TASK_ID=${TASK_ID}"
+log INFO "RUN_DIR=${RUN_DIR}"
 
 # ==============================================================================
 log STEP "install status tracking and traps"
@@ -165,13 +171,13 @@ done
 # ==============================================================================
 log STEP "configure runtime environment"
 # ==============================================================================
-# export PROJECT_ROOT JOB_ROOT JOB_PROVENANCE_DIR JOB_SNAPSHOT_DIR
 export JOB_ID 
 # task-level (payload-owned)
 export TASK_ID RUN_DIR RESULT_DIR 
-# payload contract
+# task-level provenance (payload-owned)
 export PROVENANCE_DIR="${TASK_PROVENANCE_DIR}"
 
+# threading policy (often: 1) 
 THREAD_VARS=(
 OMP_NUM_THREADS
 MKL_NUM_THREADS
@@ -179,11 +185,11 @@ OPENBLAS_NUM_THREADS
 NUMEXPR_NUM_THREADS
 STAN_NUM_THREADS
 )
-for var in "${THREAD_VARS[@]}"; do
-export "${var}=${NUM_THREADS}"
+for var in "${THREAD_VARS[@]}"; do 
+  export "${var}=${NUM_THREADS}"
 done
 
-# input directories -> <DIR>_DIR exports
+# input dirs: envars exported as <DIR>_DIR 
 INPUT_VARS=()
 for d in "${INPUT_DIRS[@]}"; do
 base="${d^^}"
@@ -192,9 +198,7 @@ INPUT_VARS+=("${var}")
 export "${var}=${PROJECT_ROOT}/${d}"
 done
 
-#log_export JOB_PROVENANCE_DIR JOB_SNAPSHOT_DIR
-log_export JOB_ID 
-log_export TASK_ID RUN_DIR RESULT_DIR PROVENANCE_DIR
+log_export JOB_ID TASK_ID RUN_DIR RESULT_DIR PROVENANCE_DIR
 log_export "${THREAD_VARS[@]}"
 log_export "${INPUT_VARS[@]}"
 
@@ -296,9 +300,9 @@ log STEP "capture task-level provenance"
 # ------------------------------------------------------------------------------
 log STEP "redirect logs to per-task files"
 # ------------------------------------------------------------------------------
-# save original stdout/stderr (bootstrap logs)
+# save original stdout/stderr (bootstrap logs) to print a final message there.
 exec 3>&1 4>&2
-
+# from now on: write to per-task logs only.
 exec >"${RUN_DIR}/stdout.log" 2>"${RUN_DIR}/stderr.log"
 
 log INFO "logging redirected; run-local execution begins"
@@ -307,6 +311,9 @@ log INFO "logging redirected; run-local execution begins"
 log STEP "execute payload"
 # ==============================================================================
 SECONDS=0
+
 "${PAYLOAD_CMD[@]}"
+
+# bring it home: finish message to bootstrap stdout 
 printf '[%s] %-5s %s\n' "$(date -Is)" INFO \
   "finish payload (${SECONDS}s); task: ${TASK_ID}; log: ${RUN_DIR}" >&3

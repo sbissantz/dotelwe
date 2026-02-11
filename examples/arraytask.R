@@ -38,7 +38,7 @@ env_chr <- list(
   run_dir        = "RUN_DIR"
 )
 
-# integer-valued (resources + identity)
+# integer-valued (resources, identity)
 env_int <- list(
   n_nodes           = "SLURM_JOB_NUM_NODES",
   n_tasks_per_node  = "SLURM_NTASKS_PER_NODE",
@@ -68,7 +68,7 @@ env <- c(
   as.list(vapply(env_int, Sys.getenv, FUN.VALUE = character(1)))
 )
 
-# strict missingness check (same philosophy as onetask.R)
+# missingness check 
 stopifnot(all(nzchar(unlist(env))))
 
 # -----------------------------------------------------------------------------

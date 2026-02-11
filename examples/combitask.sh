@@ -10,8 +10,8 @@
 #SBATCH --hint=nomultithread
 #SBATCH --open-mode=append
 #SBATCH --signal=B:USR1@5
-#SBATCH --output=jobs/%j/bootstrap.stdout.log
-#SBATCH --error=jobs/%j/bootstrap.stderr.log
+#SBATCH --output=jobs/%A/bootstrap.stdout.log
+#SBATCH --error=jobs/%A/bootstrap.stderr.log
 #SBATCH --mail-type=END
 # optional
 #SBATCH --array=1-2
@@ -228,14 +228,18 @@ else
 fi
 
 # ==============================================================================
-log STEP "capture execution code + snapshots (once per job)"
-# ==============================================================================
+log STEP "capture execution code"
+# ============================================================================== 
+
 if ( set -o noclobber; : >"${JOB_LOCK}" ) 2>/dev/null; then
   # save the exact submitted script once per job
   rsync -a --quiet -- "$0" "${SUBMIT_FILE}" \
     || log WARN "snapshot: failed to save execution code"
 
-  log STEP "snapshot specified items (once per job)"
+  # ==============================================================================
+    log STEP "snapshot specified items"
+  # ==============================================================================
+  
   for item in "${SNAPSHOT_ITEMS[@]}"; do
     rsync -a --quiet -- "${PROJECT_ROOT}/${item}" "${JOB_SNAPSHOT_DIR}/" \
       || log WARN "snapshot: failed for item: ${item}"
@@ -318,7 +322,7 @@ log STEP "capture task-level provenance"
 
 # ------------------------------------------------------------------------------
 log STEP "redirect logs to per-task files"
-log STEP "redirect logs to per-task files" >&2
+log STEP "redirect logs to per-task files" >&2 # let the error file know, too
 # ------------------------------------------------------------------------------
 # save original stdout/stderr (bootstrap logs) to print a final message there.
 exec 3>&1 4>&2
