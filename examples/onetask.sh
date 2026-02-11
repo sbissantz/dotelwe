@@ -29,11 +29,12 @@ INPUT_DIRS=(
 ) 
 
 # payload entrypoint (relative to PROJECT_ROOT)
-ENTRYPOINT=("R/onetask.R") # only one supported
+ENTRYPOINT=("R/onetask.R") # only one entrypoint supported!
 
 # payload prefix (partial); "${PROJECT_ROOT}/${ENTRYPOINT[0]}" added below
-PAYLOAD_PREFIX=(srun Rscript --vanilla) # only one supported
-# note: PAYLOAD_PREFIX=("srun" "Rscript" "--vanilla") # 3 element array 
+# note that this is a array with three elements:
+# PAYLOAD_PREFIX=("srun" "Rscript" "--vanilla") 
+PAYLOAD_PREFIX=(srun Rscript --vanilla) # only one command supported
 
 # environment modules to load (in order)
 MODULES=(
@@ -43,7 +44,7 @@ MODULES=(
 
 # snapshot: if non-empty, saves a copy once per job (relative to PROJECT_ROOT) 
 SNAPSHOT_ITEMS=(
-  "onetask.sh"  # script file (recommended)
+  # "onetask.sh"  # script file (optinal: execution code saved)
   "R"           # important: don't use "dir/", use "dir"
   "stan"        # directory
   # "config/settings.yaml"    # file
@@ -63,8 +64,8 @@ log_export(){ for name in "$@"; do log INFO "export: ${name}=${!name-}"; done; }
  log STEP "initialize infrastructure"
 # ==============================================================================
 [[ -n "${SLURM_JOB_ID:-}" ]] || die "SLURM_JOB_ID not set"
-[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || die "SLURM_SUBMIT_DIR not set"
-[[ -z "${SLURM_ARRAY_TASK_ID:-}" ]] || die "array task detected"
+[[ -n "${SLURM_SUBMIT_DIR:-}"   ]] || die "SLURM_SUBMIT_DIR not set"
+[[ -z "${SLURM_ARRAY_TASK_ID:-}" ]] || die "SLURM_ARRAY_TASK_ID set: array task"
 
 PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 JOB_DIR="${PROJECT_ROOT}/jobs"
@@ -87,7 +88,6 @@ PLATFORM_FILE="${PROVENANCE_DIR}/platform.txt"
 JOB_FILE="${PROVENANCE_DIR}/job.txt"
 RUN_FILE="${PROVENANCE_DIR}/run.txt"
 ENV_FILE="${PROVENANCE_DIR}/env.txt"
-# TODO
 SUBMIT_FILE="${PROVENANCE_DIR}/script.sh"
 
 STATUS_FILE="${RUN_DIR}/STATUS"
@@ -171,7 +171,7 @@ for d in "${INPUT_DIRS[@]}"; do
   export "${var}=${PROJECT_ROOT}/${d}"
 done
 
-log_export PROVENANCE_DIR RESULT_DIR RUN_DIR 
+log_export JOB_ID PROVENANCE_DIR RUN_DIR RESULT_DIR 
 log_export "${THREAD_VARS[@]}"
 log_export "${INPUT_VARS[@]}"
 
@@ -219,7 +219,7 @@ log STEP "capture provenance"
 
 # --- job.txt: what Slurm did ---
 {
-  echo "TIME=$(date -Is)"
+  echo "Time: $(date -Is)"
   if command -v scontrol >/dev/null 2>&1; then
     scontrol show job "$JOB_ID"
   else
