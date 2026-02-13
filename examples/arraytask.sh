@@ -4,7 +4,6 @@
 #SBATCH --time=00:02:00
 #SBATCH --mem=200M
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --hint=nomultithread
@@ -25,7 +24,7 @@ BOOTSTRAP_FD_ERR=2
 # ==============================================================================
 # user config
 # ==============================================================================
-PROJECT_NAME="combitask"
+PROJECT_NAME="arraytask"
 
 # specify directories that live in the project root
 INPUT_DIRS=(
@@ -35,7 +34,7 @@ INPUT_DIRS=(
 )
 
 # payload entrypoint (relative to PROJECT_ROOT)
-ENTRYPOINT=("R/combitask.R") # only one entrypoint supported
+ENTRYPOINT=("R/arraytask.R") # only one entrypoint supported
 
 # payload prefix (partial); "${PROJECT_ROOT}/${ENTRYPOINT[0]}" appended below
 # note: this is an array:
@@ -99,16 +98,12 @@ JOB_ID="${SLURM_ARRAY_JOB_ID}"
 TASK_ID="${SLURM_ARRAY_TASK_ID}"
 
 JOB_DIR="${PROJECT_ROOT}/jobs"
-mkdir -p "${JOB_DIR}" # just to make sure
-
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
-mkdir -p "${JOB_ROOT}" # just to make sure
 
 # per job
+RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 JOB_PROVENANCE_DIR="${JOB_ROOT}/provenance"
 JOB_SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
-
-RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 
 # per task
 TASK_PROVENANCE_DIR="${RUN_DIR}/provenance"
@@ -128,7 +123,7 @@ ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 # provenance files
 # ------------------------------------------------------------------------------
 
-# take control over where output goes 
+# bootstrap/payload logs in job dir
 BOOTSTRAP_STDOUT="${RUN_DIR}/bootstrap.stdout.log"
 BOOTSTRAP_STDERR="${RUN_DIR}/bootstrap.stderr.log"
 PAYLOAD_STDOUT="${RUN_DIR}/payload.stdout.log"
@@ -138,10 +133,6 @@ exec 8>>"${BOOTSTRAP_STDOUT}"
 exec 9>>"${BOOTSTRAP_STDERR}" 
 BOOTSTRAP_FD_OUT=8
 BOOTSTRAP_FD_ERR=9
-
-# ------------------------------------------------------------------------------
-# provenance files
-# ------------------------------------------------------------------------------
 
 PLATFORM_FILE="${JOB_PROVENANCE_DIR}/platform.txt"   # once per job
 JOB_FILE="${JOB_PROVENANCE_DIR}/job.txt"             # ... 

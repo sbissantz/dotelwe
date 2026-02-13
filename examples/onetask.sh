@@ -1,135 +1,151 @@
 #!/usr/bin/env bash
-
 #SBATCH --job-name=onetask
 #SBATCH --time=00:03:00
 #SBATCH --mem=100M
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --hint=nomultithread
 #SBATCH --open-mode=append
 #SBATCH --signal=B:USR1@5
-#SBATCH --output=jobs/%j/stdout.log
-#SBATCH --error=jobs/%j/stderr.log
-#SBATCH --mail-type=END            
+#SBATCH --mail-type=END
+#SBATCH --output=jobs/%j/bootstrap.stdout.log
+#SBATCH --error=jobs/%j/bootstrap.stderr.log
 
 set -eEuo pipefail
 
 # ==============================================================================
-# user config 
+# user config
 # ==============================================================================
+
 PROJECT_NAME="demo_onetask"
-
-# specify directories that live in the project root
-INPUT_DIRS=(
-  "R"    # R scripts
-  "stan" # stan model syntax
-  "data" # datasets
-) 
-
-# payload entrypoint (relative to PROJECT_ROOT)
-ENTRYPOINT=("R/onetask.R") # only one entrypoint supported!
-
-# payload prefix (partial); "${PROJECT_ROOT}/${ENTRYPOINT[0]}" added below
-# note that this is a array with three elements:
-# PAYLOAD_PREFIX=("srun" "Rscript" "--vanilla") 
-PAYLOAD_PREFIX=(srun Rscript --vanilla) # only one command supported
-
-# environment modules to load (in order)
-MODULES=(
-  "R/4.4"
-  # "gcc/12.2.0"
-)
-
-# snapshot: if non-empty, saves a copy once per job (relative to PROJECT_ROOT) 
-SNAPSHOT_ITEMS=(
-  # "onetask.sh"  # script file (optinal: execution code saved)
-  "R"           # important: don't use "dir/", use "dir"
-  "stan"        # directory
-  # "config/settings.yaml"    # file
-)
-
-# threading policy (script-owned)
+INPUT_DIRS=( R stan data )
+ENTRYPOINT=("R/onetask.R") # only one entrypoint supported
+PAYLOAD_PREFIX=( srun Rscript --vanilla )
+MODULES=( "R/4.4" )
+SNAPSHOT_ITEMS=( R stan )
 NUM_THREADS=1
 
 # ==============================================================================
-# initialize general helper functions 
+# logging (bootstrap + payload separation)
 # ==============================================================================
-log() { printf '[%s] %-5s %s\n' "$(date -Is)" "${1}" "${*:2}"; }
-die() { log ERROR "$*"; exit 2; }
-log_export(){ for name in "$@"; do log INFO "export: ${name}=${!name-}"; done; }
+# default bootstrap file descriptors to stdout/stderr so early blog_* calls
+# never fail; later reassigned to log files
+BOOTSTRAP_FD_OUT=1
+BOOTSTRAP_FD_ERR=2
 
 # ==============================================================================
- log STEP "initialize infrastructure"
+# helper functions
 # ==============================================================================
-[[ -n "${SLURM_JOB_ID:-}" ]] || die "SLURM_JOB_ID not set"
-[[ -n "${SLURM_SUBMIT_DIR:-}"   ]] || die "SLURM_SUBMIT_DIR not set"
-[[ -z "${SLURM_ARRAY_TASK_ID:-}" ]] || die "SLURM_ARRAY_TASK_ID set: array task"
+_blog_post() {
+  local fd="$1"; shift
+  local level="$1"; shift
+  local msg="${*//$'\r'/}"
+  printf '[%s] %-5s | %s\n' "$(date -Is)" "$level" "$msg" >&"${fd}"
+}
+blog_step()  { _blog_post "${BOOTSTRAP_FD_OUT}" STEP  "$@"; }
+blog_info()  { _blog_post "${BOOTSTRAP_FD_OUT}" INFO  "$@"; }
+blog_warn()  { _blog_post "${BOOTSTRAP_FD_ERR}" WARN  "$@"; }
+blog_error() { _blog_post "${BOOTSTRAP_FD_ERR}" ERROR "$@"; }
+blog_die() { blog_error "$@"; exit 2; }
+blog_export() {
+  local name
+  for name in "$@"; do
+    blog_info "export: ${name}=${!name-}"
+  done
+}
+
+# ==============================================================================
+blog_step "initialize infrastructure"
+# ==============================================================================
+[[ -n "${SLURM_JOB_ID:-}" ]] || blog_die "SLURM_JOB_ID not set"
+[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || blog_die "SLURM_SUBMIT_DIR not set"
+[[ -z "${SLURM_ARRAY_TASK_ID:-}" ]] || blog_die "SLURM_ARRAY_TASK_ID set"
 
 PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
-JOB_DIR="${PROJECT_ROOT}/jobs"
-
 JOB_ID="${SLURM_JOB_ID}"
 
+JOB_DIR="${PROJECT_ROOT}/jobs"
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
+
 RUN_DIR="${JOB_ROOT}"
-
-PROVENANCE_DIR="${JOB_ROOT}/provenance"
-SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
-
 RESULT_DIR="${RUN_DIR}/results"
+PROVENANCE_DIR="${RUN_DIR}/provenance"
+SNAPSHOT_DIR="${RUN_DIR}/snapshots"
 
-mkdir -p "${RUN_DIR}" "${PROVENANCE_DIR}" "${SNAPSHOT_DIR}" "${RESULT_DIR}"
-
+mkdir -p "${RESULT_DIR}" "${PROVENANCE_DIR}" "${SNAPSHOT_DIR}"
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
+# bootstrap/payload logs in job dir
+BOOTSTRAP_STDOUT="${RUN_DIR}/bootstrap.stdout.log"
+BOOTSTRAP_STDERR="${RUN_DIR}/bootstrap.stderr.log"
+PAYLOAD_STDOUT="${RUN_DIR}/payload.stdout.log"
+PAYLOAD_STDERR="${RUN_DIR}/payload.stderr.log"
+
+exec 8>>"${BOOTSTRAP_STDOUT}"
+exec 9>>"${BOOTSTRAP_STDERR}"
+BOOTSTRAP_FD_OUT=8
+BOOTSTRAP_FD_ERR=9
+
+STATUS_FILE="${RUN_DIR}/STATUS"
 PLATFORM_FILE="${PROVENANCE_DIR}/platform.txt"
 JOB_FILE="${PROVENANCE_DIR}/job.txt"
 RUN_FILE="${PROVENANCE_DIR}/run.txt"
 ENV_FILE="${PROVENANCE_DIR}/env.txt"
 SUBMIT_FILE="${PROVENANCE_DIR}/script.sh"
 
-STATUS_FILE="${RUN_DIR}/STATUS"
-
-# finish payload command (note: [first] entrypoint only '[0]')
 PAYLOAD_CMD=("${PAYLOAD_PREFIX[@]}")
 PAYLOAD_CMD+=("${PROJECT_ROOT}/${ENTRYPOINT[0]}")
 
+blog_info "JOB_ID=${JOB_ID}"
+blog_info "RUN_DIR=${RUN_DIR}"
+
 # ==============================================================================
-log STEP "install status tracking and traps"
+blog_step "install status tracking and traps"
 # ==============================================================================
 echo "RUNNING" > "${STATUS_FILE}"
 
-set_final_status() {
-  local new="${1}"
+set_status() {
   local cur
-  cur="$(cat "${STATUS_FILE}" 2>/dev/null || true)"
-  if [[ "${cur}" == "RUNNING" ]]; then
-    echo "${new}" > "${STATUS_FILE}"
-  fi
+  cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
+  [[ "$cur" == "RUNNING" ]] && echo "$1" > "${STATUS_FILE}"
+  return 0
 }
-
 on_timeout() {
-  set_final_status "TIMEOUT"
-  log WARN "status: TIMEOUT (USR1: nearing walltime)"
+  set_status "TIMEOUT"
+  # don't let logging failure change exit behavior
+  blog_warn "status: TIMEOUT (USR1: nearing walltime)" || true
   exit 99
 }
 on_kill() {
-  set_final_status "KILLED"
-  log WARN "status: KILLED (termination signal)"
+  set_status "KILLED"
+  blog_warn "status: KILLED (termination signal)" || true
   exit 143
 }
 on_err() {
-  set_final_status "FAILED"
-  log ERROR "status: FAILED (line ${LINENO}: ${BASH_COMMAND})"
+  local rc=$?                     # exit code of failing command
+  local line="${BASH_LINENO[0]}"  # line where failure occurred 
+  local cmd="${BASH_COMMAND}"     # command that failed
+  # prevent recursive ERR trap if something here fails
+  trap - ERR
+  set_status "FAILED"
+  blog_error "status: FAILED (rc=${rc}, line=${line}, cmd=${cmd})" || true
+  exit "${rc}"
 }
 on_exit() {
-  local rc=$?
-  if [[ ${rc} -eq 0 ]]; then
-    set_final_status "OK"
-    log INFO "status: OK"
+  local rc=$? 
+  # read current status (first line)
+  local cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
+  # if still RUNNING (or malformed), finalize based on rc
+  if [[ -z "$cur" || "$cur" == "RUNNING" ]]; then
+    if (( rc == 0 )); then
+      cur="COMPLETED"
+    else
+      cur="FAILED"
+    fi
+    echo "$cur" > "${STATUS_FILE}"
   fi
+  blog_info "status: ${cur} (exit code ${rc})"
 }
 
 trap on_timeout USR1
@@ -138,19 +154,19 @@ trap on_err ERR
 trap on_exit EXIT
 
 # ==============================================================================
-log STEP "validate input directories"
+blog_step "validate inputs"
 # ==============================================================================
 for d in "${INPUT_DIRS[@]}"; do
-  [[ -d "${PROJECT_ROOT}/${d}" ]] || die "missing input dir: ${d}/"
+  [[ -d "${PROJECT_ROOT}/${d}" ]] || blog_die "missing input dir: ${d}/"
 done
-[[ -f "${PROJECT_ROOT}/${ENTRYPOINT[0]}" ]] || die "missing entrypoint: ${ENTRYPOINT[0]}"
+[[ -f "${PROJECT_ROOT}/${ENTRYPOINT[0]}" ]] || blog_die "missing entrypoint: ${ENTRYPOINT[0]}"
 
 # ==============================================================================
-log STEP "configure runtime environment"
+blog_step "configure runtime environment"
 # ==============================================================================
-export PROVENANCE_DIR RESULT_DIR RUN_DIR 
+export RUN_DIR RESULT_DIR PROVENANCE_DIR JOB_ID
 
-# threading policy for all of them (often: THREADS=1)
+# threading policy (often; 1)
 THREAD_VARS=(
   OMP_NUM_THREADS
   MKL_NUM_THREADS
@@ -162,7 +178,7 @@ for var in "${THREAD_VARS[@]}"; do
   export "${var}=${NUM_THREADS}"
 done
 
-# input directories
+# input dir: envars exported as <DIR>_DIR 
 INPUT_VARS=()
 for d in "${INPUT_DIRS[@]}"; do
   base="${d^^}"
@@ -171,12 +187,12 @@ for d in "${INPUT_DIRS[@]}"; do
   export "${var}=${PROJECT_ROOT}/${d}"
 done
 
-log_export JOB_ID PROVENANCE_DIR RUN_DIR RESULT_DIR 
-log_export "${THREAD_VARS[@]}"
-log_export "${INPUT_VARS[@]}"
+blog_export JOB_ID RUN_DIR RESULT_DIR PROVENANCE_DIR
+blog_export "${THREAD_VARS[@]}"
+blog_export "${INPUT_VARS[@]}"
 
 # ==============================================================================
-log STEP "load environment modules"
+blog_step "load environment modules"
 # ==============================================================================
 if command -v module >/dev/null 2>&1; then
   module purge
@@ -184,67 +200,52 @@ if command -v module >/dev/null 2>&1; then
     module load "${m}"
   done
 else
-  log WARN "module command not available; assuming tools on PATH"
+  blog_warn "module command not available; assuming tools on PATH"
 fi
 
 # ==============================================================================
-log STEP "capture execution code"
+blog_step "capture execution code and snapshots"
 # ==============================================================================
-rsync -a -- "$0" "${SUBMIT_FILE}" \
-  || log WARN "snapshot: failed to save execution code"
+rsync -a --quiet -- "$0" "${SUBMIT_FILE}" \
+  || blog_warn "snapshot: failed to save execution code"
 
-# ==============================================================================
-log STEP "snapshot specified items"
-# ==============================================================================
 for item in "${SNAPSHOT_ITEMS[@]}"; do
-  rsync -a -- "${PROJECT_ROOT}/${item}" "${SNAPSHOT_DIR}/" \
-    || log WARN "snapshot: failed for item: ${item}"
+  rsync -a --quiet -- \
+    "${PROJECT_ROOT}/${item}" \
+    "${SNAPSHOT_DIR}/" \
+    || blog_warn "snapshot: failed for item: ${item}"
 done
 
 # ==============================================================================
-log STEP "capture provenance"
+blog_step "capture provenance"
 # ==============================================================================
-
-# --- platform.txt: where it ran ---
 {
   echo "Time: $(date -Is)"
   echo "Node: $(hostname)"
   echo "Arch: $(uname -m)"
   echo "Kernel: $(uname -srm)"
-  if [[ -r /etc/os-release ]]; then
-    . /etc/os-release
-    echo "Operating system: ${PRETTY_NAME}"
-  fi
+  if [[ -r /etc/os-release ]]; then . /etc/os-release; echo "Operating system: ${PRETTY_NAME}"; fi
 } >"${PLATFORM_FILE}"
 
-# --- job.txt: what Slurm did ---
 {
   echo "Time: $(date -Is)"
   if command -v scontrol >/dev/null 2>&1; then
-    scontrol show job "$JOB_ID"
+    scontrol show job "${JOB_ID}"
   else
     env | grep '^SLURM_' | sort || true
   fi
-} >"${JOB_FILE}"
-
-# --- run.txt: what you ran (intent + identity) ---
+} > "${JOB_FILE}"
 {
   echo "Start time: $(date -Is)"
   echo "Project name: ${PROJECT_NAME}"
-  printf 'Entrypoint: '
-  printf '%q ' "${ENTRYPOINT[0]}"
-  printf '\n'
-  printf 'Command: '
-  printf '%q ' "${PAYLOAD_CMD[@]}"
-  printf '\n'
+  printf 'Entrypoint: %q\n' "${ENTRYPOINT[0]}"
+  printf 'Command: '; printf '%q ' "${PAYLOAD_CMD[@]}"; echo
   echo "Threads: ${NUM_THREADS}"
   ((${#MODULES[@]})) && echo "Requested modules: ${MODULES[*]}"
   echo "Project root: ${PROJECT_ROOT}"
   echo "Job root: ${JOB_ROOT}"
-  echo "Run directoy: ${RUN_DIR}"
+  echo "Run directory: ${RUN_DIR}"
 } >"${RUN_FILE}"
-
-# --- env.txt: effective runtime environment ---
 {
   if command -v module >/dev/null 2>&1; then
     module -t list 2>&1
@@ -253,12 +254,41 @@ log STEP "capture provenance"
   fi
   echo
   echo "Environment variables:"
-  env | grep -E '^(SLURM_|OMP_|MKL_|OPENBLAS_|NUMEXPR_|STAN_|PATH=|LANG=|LC_|TZ=)' | sort || true
-} >"${ENV_FILE}"
+  env | grep -E \
+    '^(SLURM_|OMP_|MKL_|OPENBLAS_|NUMEXPR_|STAN_|JOB_ID=|PATH=|LANG=|LC_|TZ=)' \
+    | sort \
+    || true
+
+} > "${ENV_FILE}"
 
 # ==============================================================================
-log STEP "execute payload"
+blog_step "redirect logs to payload files"
 # ==============================================================================
-SECONDS=0   # reset: track runtime from here 
-"${PAYLOAD_CMD[@]}" # execute payload command(s)
-log INFO "finish payload (${SECONDS}s)"
+blog_info "payload stdout: ${PAYLOAD_STDOUT}"
+blog_info "payload stderr: ${PAYLOAD_STDERR}"
+
+# ==============================================================================
+blog_step "execute payload"
+# ==============================================================================
+SECONDS=0
+
+blog_info "payload cmd: $(printf '%q ' "${PAYLOAD_CMD[@]}")"
+
+cd "${RUN_DIR}"
+
+(
+  trap - ERR
+  exec >"${PAYLOAD_STDOUT}" 2>"${PAYLOAD_STDERR}"
+  "${PAYLOAD_CMD[@]}"
+)
+rc=$?
+
+if (( rc == 0 )); then
+  blog_info "finish payload (${SECONDS}s)"
+  exit 0
+else
+  blog_error "payload failed (rc=${rc})"
+  exit "${rc}"
+fi
+
+
