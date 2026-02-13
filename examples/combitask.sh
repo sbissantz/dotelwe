@@ -18,7 +18,8 @@
  
 set -eEuo pipefail
 
-# TODO: Simplify for arrays and non-arrays (bootstrap.stdout and payload)
+BOOTSTRAP_FD_OUT=1
+BOOTSTRAP_FD_ERR=2
 
 # ==============================================================================
 # user config
@@ -61,9 +62,6 @@ NUM_THREADS=1
 # ==============================================================================
 # helper functions
 # ==============================================================================
-BOOTSTRAP_FD_OUT=""
-BOOTSTRAP_FD_ERR=""
-
 _blog_post() {
   local fd="$1"; shift
   local level="$1"; shift
@@ -121,8 +119,10 @@ mkdir -p "${JOB_ROOT}" # just to make sure
 # take control over where output goes 
 BOOTSTRAP_STDOUT="${JOB_ROOT}/bootstrap.stdout.log"
 BOOTSTRAP_STDERR="${JOB_ROOT}/bootstrap.stderr.log"
-exec 8>>"${BOOTSTRAP_STDOUT}" ; BOOTSTRAP_FD_OUT="8"
-exec 9>>"${BOOTSTRAP_STDERR}" ; BOOTSTRAP_FD_ERR="9"
+exec 8>>"${BOOTSTRAP_STDOUT}"
+exec 9>>"${BOOTSTRAP_STDERR}"
+BOOTSTRAP_FD_OUT=8
+BOOTSTRAP_FD_ERR=9
 
 # per job
 JOB_PROVENANCE_DIR="${JOB_ROOT}/provenance"
@@ -142,9 +142,6 @@ mkdir -p \
 
 # convenience link: jobs/lastjob to jobs/<JOB_ID>
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
-
-# switch to run directory (so relative outputs are per-task by default)
-cd "${RUN_DIR}"
 
 # ------------------------------------------------------------------------------
 # provenance files
@@ -178,30 +175,34 @@ blog_step "install status tracking and traps"
 echo "RUNNING" > "${STATUS_FILE}"
 
 set_status() {
-  local new="$1"
   local cur
   cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
-  [[ "$cur" == "RUNNING" ]] && echo "$new" > "${STATUS_FILE}"
+  [[ "$cur" == "RUNNING" ]] && echo "$1" > "${STATUS_FILE}"
+  return 0
 }
-
 on_timeout() {
   set_status "TIMEOUT"
-  blog_warn "status: TIMEOUT (USR1: nearing walltime)"
+  # don't let logging failure change exit behavior
+  blog_warn "status: TIMEOUT (USR1: nearing walltime)" || true
   exit 99
 }
 on_kill() {
   set_status "KILLED"
-  blog_warn "status: KILLED (termination signal)"
+  blog_warn "status: KILLED (termination signal)" || true
   exit 143
 }
 on_err() {
+  local rc=$?                     # exit code of failing command
+  local line="${BASH_LINENO[0]}"  # line where failure occurred 
+  local cmd="${BASH_COMMAND}"     # command that failed
+  # prevent recursive ERR trap if something here fails
+  trap - ERR
   set_status "FAILED"
-  blog_error "status: FAILED (line ${LINENO}: ${BASH_COMMAND})"
-  exit 1
+  blog_error "status: FAILED (rc=${rc}, line=${line}, cmd=${cmd})" || true
+  exit "${rc}"
 }
-
 on_exit() {
-  local rc=$?
+  local rc=$? 
   # read current status (first line)
   local cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
   # if still RUNNING (or malformed), finalize based on rc
@@ -323,7 +324,6 @@ fi
 # ==============================================================================
 blog_step "capture task-level provenance"
 # ==============================================================================
-
 # --- run.txt: what you ran (per task) ---
 {
   echo "Start time: $(date -Is)"
@@ -358,22 +358,31 @@ blog_step "capture task-level provenance"
 # ==============================================================================
 blog_step "redirect logs to per-task files"
 # ==============================================================================
-
-blog_info "run-specific stderr and stdout: ${RUN_DIR}"
+blog_info "payload stdout: ${TASK_STDOUT}"
+blog_info "payload stderr: ${TASK_STDERR}"
 
 # ==============================================================================
 blog_step "execute payload"
 # ==============================================================================
 SECONDS=0
 
-if ( # run in a sub-shell to write log in run-specific files
+blog_info "payload cmd: $(printf '%q ' "${PAYLOAD_CMD[@]}")"
+
+# switch to run directory (so relative outputs are per-task by default)
+cd "${RUN_DIR}"
+
+# run payload with stdout/stderr redirected to payload logs only
+(
+  trap - ERR
   exec >"${TASK_STDOUT}" 2>"${TASK_STDERR}"
   "${PAYLOAD_CMD[@]}"
-  ); then
+)
+rc=$?
+
+if (( rc == 0 )); then
   blog_info "finish payload (${SECONDS}s)"
   exit 0
 else
-  rc=$?
   blog_error "payload failed (rc=${rc})"
-  exit "$rc"
+  exit "${rc}"
 fi
