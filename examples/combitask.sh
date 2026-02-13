@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 
 #SBATCH --job-name=combitask
-#SBATCH --time=00:03:00
-#SBATCH --mem=100M
+#SBATCH --time=00:02:00
+#SBATCH --mem=200M
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --hint=nomultithread
 #SBATCH --open-mode=append
-#SBATCH --signal=B:USR1@5
+#SBATCH --signal=B:USR1@30
 #SBATCH --output=jobs/%A/bootstrap.stdout.log
 #SBATCH --error=jobs/%A/bootstrap.stderr.log
 #SBATCH --mail-type=END
 # optional
 #SBATCH --array=1-2
-
+ 
 set -eEuo pipefail
+
+# TODO: Simplify for arrays and non-arrays (bootstrap.stdout and payload)
 
 # ==============================================================================
 # user config
@@ -59,35 +61,74 @@ NUM_THREADS=1
 # ==============================================================================
 # helper functions
 # ==============================================================================
-log() { printf '[%s] %-5s %s\n' "$(date -Is)" "${1}" "${*:2}"; }
-die() { log ERROR "$*"; exit 2; }
-log_export(){ for name in "$@"; do log INFO "export: ${name}=${!name-}"; done; }
+BOOTSTRAP_FD_OUT=""
+BOOTSTRAP_FD_ERR=""
+
+_blog_post() {
+  local fd="$1"; shift
+  local level="$1"; shift
+  local msg="${*//$'\r'/}"
+  local ts job task id
+  ts="$(date -Is)"
+  # - job: array master id if array, else normal job id
+  # - task: array task id if array, else 0
+  job="${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-UNKNOWN}}"
+  task="${SLURM_ARRAY_TASK_ID:-0}"
+  id="${job}.a${task}"
+  if [[ -n "${fd}" ]]; then
+    flock -x "${fd}" # serialize outputs
+    printf '[%s] %-5s %-10s | %s\n' "$ts" "$level" "$id" "$msg" >&"${fd}"
+    flock -u "${fd}"
+  else
+    printf '[%s] %-5s %-10s | %s\n' "$ts" "$level" "$id" "$msg"
+  fi
+}
+blog_step()  { _blog_post "${BOOTSTRAP_FD_OUT}" STEP  "$@"; }
+blog_info()  { _blog_post "${BOOTSTRAP_FD_OUT}" INFO  "$@"; }
+blog_warn()  { _blog_post "${BOOTSTRAP_FD_ERR}" WARN  "$@"; }
+blog_error() { _blog_post "${BOOTSTRAP_FD_ERR}" ERROR "$@"; }
+blog_die() { blog_error "$@"; exit 2; }
+blog_export() {
+  local name
+  for name in "$@"; do
+    blog_info "export: ${name}=${!name-}"
+  done
+}
 
 # ==============================================================================
-log STEP "initialize infrastructure"
+blog_step "initialize infrastructure"
 # ==============================================================================
-[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || die "SLURM_SUBMIT_DIR not set"
+[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || blog_die "SLURM_SUBMIT_DIR not set"
 
 PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
+
 JOB_DIR="${PROJECT_ROOT}/jobs"
+mkdir -p "${JOB_DIR}" # just to make sure
 
 # determine job/task identity (array optional)
 if [[ -n "${SLURM_ARRAY_JOB_ID:-}" && -n "${SLURM_ARRAY_TASK_ID:-}" ]]; then
   JOB_ID="${SLURM_ARRAY_JOB_ID}"
   TASK_ID="${SLURM_ARRAY_TASK_ID}"
 else
-  [[ -n "${SLURM_JOB_ID:-}" ]] || die "SLURM_JOB_ID not set"
+  [[ -n "${SLURM_JOB_ID:-}" ]] || blog_die "SLURM_JOB_ID not set"
   JOB_ID="${SLURM_JOB_ID}"
   TASK_ID="0"
 fi
 
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
-RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
+mkdir -p "${JOB_ROOT}" # just to make sure
+
+# take control over where output goes 
+BOOTSTRAP_STDOUT="${JOB_ROOT}/bootstrap.stdout.log"
+BOOTSTRAP_STDERR="${JOB_ROOT}/bootstrap.stderr.log"
+exec 8>>"${BOOTSTRAP_STDOUT}" ; BOOTSTRAP_FD_OUT="8"
+exec 9>>"${BOOTSTRAP_STDERR}" ; BOOTSTRAP_FD_ERR="9"
 
 # per job
 JOB_PROVENANCE_DIR="${JOB_ROOT}/provenance"
 JOB_SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
 
+RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 # per task
 TASK_PROVENANCE_DIR="${RUN_DIR}/provenance"
 RESULT_DIR="${RUN_DIR}/results"
@@ -108,14 +149,16 @@ cd "${RUN_DIR}"
 # ------------------------------------------------------------------------------
 # provenance files
 # ------------------------------------------------------------------------------
+
 PLATFORM_FILE="${JOB_PROVENANCE_DIR}/platform.txt"   # once per job
 JOB_FILE="${JOB_PROVENANCE_DIR}/job.txt"             # ... 
 SUBMIT_FILE="${JOB_PROVENANCE_DIR}/script.sh"        # ... 
 
-TASK_FILE="${TASK_PROVENANCE_DIR}/task.txt"          # per task
-RUN_FILE="${TASK_PROVENANCE_DIR}/run.txt"            # ... 
+RUN_FILE="${TASK_PROVENANCE_DIR}/run.txt"            # per task
 ENV_FILE="${TASK_PROVENANCE_DIR}/env.txt"            # ... 
 
+TASK_STDOUT="${RUN_DIR}/stdout.log"
+TASK_STDERR="${RUN_DIR}/stderr.log"
 STATUS_FILE="${RUN_DIR}/STATUS"
 
 # lock to ensure files are written once per job (even with arrays)
@@ -125,47 +168,52 @@ JOB_LOCK="${JOB_PROVENANCE_DIR}/.written"
 PAYLOAD_CMD=("${PAYLOAD_PREFIX[@]}")
 PAYLOAD_CMD+=("${PROJECT_ROOT}/${ENTRYPOINT[0]}")
 
-log INFO "JOB_ID=${JOB_ID}"
-log INFO "TASK_ID=${TASK_ID}"
-log INFO "RUN_DIR=${RUN_DIR}"
+blog_info "JOB_ID=${JOB_ID}"
+blog_info "TASK_ID=${TASK_ID}"
+blog_info "RUN_DIR=${RUN_DIR}"
 
 # ==============================================================================
-log STEP "install status tracking and traps"
+blog_step "install status tracking and traps"
 # ==============================================================================
 echo "RUNNING" > "${STATUS_FILE}"
 
-set_final_status() {
-  local new="${1}"
+set_status() {
+  local new="$1"
   local cur
-  cur="$(cat "${STATUS_FILE}" 2>/dev/null || true)"
-  if [[ "${cur}" == "RUNNING" ]]; then
-    echo "${new}" > "${STATUS_FILE}"
-  fi
+  cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
+  [[ "$cur" == "RUNNING" ]] && echo "$new" > "${STATUS_FILE}"
 }
 
 on_timeout() {
-  set_final_status "TIMEOUT"
-  log WARN "status: TIMEOUT (USR1: nearing walltime)"
+  set_status "TIMEOUT"
+  blog_warn "status: TIMEOUT (USR1: nearing walltime)"
   exit 99
 }
 on_kill() {
-  set_final_status "KILLED"
-  log WARN "status: KILLED (termination signal)"
+  set_status "KILLED"
+  blog_warn "status: KILLED (termination signal)"
   exit 143
 }
 on_err() {
-  set_final_status "FAILED"
-  log ERROR "status: FAILED (line ${LINENO}: ${BASH_COMMAND})"
+  set_status "FAILED"
+  blog_error "status: FAILED (line ${LINENO}: ${BASH_COMMAND})"
+  exit 1
 }
+
 on_exit() {
   local rc=$?
-  if [[ $rc -eq 0 ]]; then
-    set_final_status "OK"
-    log INFO "status: OK"
-  else
-    set_final_status "FAILED"
-    log ERROR "status: FAILED (exit code ${rc})"
+  # read current status (first line)
+  local cur="$(head -n1 "${STATUS_FILE}" 2>/dev/null || true)"
+  # if still RUNNING (or malformed), finalize based on rc
+  if [[ -z "$cur" || "$cur" == "RUNNING" ]]; then
+    if (( rc == 0 )); then
+      cur="COMPLETED"
+    else
+      cur="FAILED"
+    fi
+    echo "$cur" > "${STATUS_FILE}"
   fi
+  blog_info "status: ${cur} (exit code ${rc})"
 }
 
 trap on_timeout USR1
@@ -174,15 +222,15 @@ trap on_err ERR
 trap on_exit EXIT
 
 # ==============================================================================
-log STEP "validate input directories"
+blog_step "validate input directories"
 # ==============================================================================
 for d in "${INPUT_DIRS[@]}"; do
-  [[ -d "${PROJECT_ROOT}/${d}" ]] || die "missing input dir: ${d}/"
+  [[ -d "${PROJECT_ROOT}/${d}" ]] || blog_die "missing input dir: ${d}/"
 done
-[[ -f "${PROJECT_ROOT}/${ENTRYPOINT[0]}" ]] || die "missing entrypoint: ${ENTRYPOINT[0]}"
+[[ -f "${PROJECT_ROOT}/${ENTRYPOINT[0]}" ]] || blog_die "missing entrypoint: ${ENTRYPOINT[0]}"
 
 # ==============================================================================
-log STEP "configure runtime environment"
+blog_step "configure runtime environment"
 # ==============================================================================
 export JOB_ID TASK_ID
 # task directories (payload-owned)
@@ -211,12 +259,12 @@ for d in "${INPUT_DIRS[@]}"; do
   export "${var}=${PROJECT_ROOT}/${d}"
 done
 
-log_export JOB_ID TASK_ID RUN_DIR RESULT_DIR PROVENANCE_DIR
-log_export "${THREAD_VARS[@]}"
-log_export "${INPUT_VARS[@]}"
+blog_export JOB_ID TASK_ID RUN_DIR RESULT_DIR PROVENANCE_DIR
+blog_export "${THREAD_VARS[@]}"
+blog_export "${INPUT_VARS[@]}"
 
 # ==============================================================================
-log STEP "load environment modules"
+blog_step "load environment modules"
 # ==============================================================================
 if command -v module >/dev/null 2>&1; then
   module purge
@@ -224,29 +272,29 @@ if command -v module >/dev/null 2>&1; then
     module load "${m}"
   done
 else
-  log WARN "module command not available; assuming tools on PATH"
+  blog_warn "module command not available; assuming tools on PATH"
 fi
 
 # ==============================================================================
-log STEP "capture execution code"
+blog_step "capture execution code"
 # ============================================================================== 
 
 if ( set -o noclobber; : >"${JOB_LOCK}" ) 2>/dev/null; then
   # save the exact submitted script once per job
   rsync -a --quiet -- "$0" "${SUBMIT_FILE}" \
-    || log WARN "snapshot: failed to save execution code"
+    || blog_warn "snapshot: failed to save execution code"
 
   # ==============================================================================
-    log STEP "snapshot specified items"
+    blog_step "snapshot specified items"
   # ==============================================================================
   
   for item in "${SNAPSHOT_ITEMS[@]}"; do
     rsync -a --quiet -- "${PROJECT_ROOT}/${item}" "${JOB_SNAPSHOT_DIR}/" \
-      || log WARN "snapshot: failed for item: ${item}"
+      || blog_warn "snapshot: failed for item: ${item}"
   done
 
   # ==============================================================================
-  log STEP "capture job-level provenance (once per job)"
+  blog_step "capture job-level provenance (once per job)"
   # ==============================================================================
   # --- platform.txt: where it ran (job-level) ---
   {
@@ -273,21 +321,8 @@ if ( set -o noclobber; : >"${JOB_LOCK}" ) 2>/dev/null; then
 fi
 
 # ==============================================================================
-log STEP "capture task-level provenance"
+blog_step "capture task-level provenance"
 # ==============================================================================
-# --- task.txt: what Slurm did (task-level) ---
-{
-  if command -v scontrol >/dev/null 2>&1; then
-    # SLURM_JOB_ID is the concrete task job id in arrays; use it when available.
-    if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-      scontrol show job "${SLURM_JOB_ID}"
-    else
-      scontrol show job "${JOB_ID}"
-    fi
-  else
-    env | grep '^SLURM_' | sort || true
-  fi
-} >"${TASK_FILE}"
 
 # --- run.txt: what you ran (per task) ---
 {
@@ -320,25 +355,25 @@ log STEP "capture task-level provenance"
   env | grep -E '^(SLURM_|OMP_|MKL_|OPENBLAS_|NUMEXPR_|STAN_|TASK_ID=|JOB_ID=|PATH=|LANG=|LC_|TZ=)' | sort || true
 } >"${ENV_FILE}"
 
-# ------------------------------------------------------------------------------
-log STEP "redirect logs to per-task files"
-log STEP "redirect logs to per-task files" >&2 # let the error file know, too
-# ------------------------------------------------------------------------------
-# save original stdout/stderr (bootstrap logs) to print a final message there.
-exec 3>&1 4>&2
-# from now on: write to per-task logs only.
-exec >"${RUN_DIR}/stdout.log" 2>"${RUN_DIR}/stderr.log"
+# ==============================================================================
+blog_step "redirect logs to per-task files"
+# ==============================================================================
 
-log INFO "logging redirected; run-local execution begins"
+blog_info "run-specific stderr and stdout: ${RUN_DIR}"
 
 # ==============================================================================
-log STEP "execute payload"
+blog_step "execute payload"
 # ==============================================================================
 SECONDS=0
 
-"${PAYLOAD_CMD[@]}"
-
-# bring it home: finish message to bootstrap stdout 
-printf '[%s] %-5s %s\n' "$(date -Is)" INFO \
-  "finish payload (${SECONDS}s); task=${TASK_ID}; logs in ${RUN_DIR}" >&3
-
+if ( # run in a sub-shell to write log in run-specific files
+  exec >"${TASK_STDOUT}" 2>"${TASK_STDERR}"
+  "${PAYLOAD_CMD[@]}"
+  ); then
+  blog_info "finish payload (${SECONDS}s)"
+  exit 0
+else
+  rc=$?
+  blog_error "payload failed (rc=${rc})"
+  exit "$rc"
+fi
