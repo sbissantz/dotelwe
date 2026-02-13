@@ -100,7 +100,6 @@ blog_step "initialize infrastructure"
 PROJECT_ROOT="${SLURM_SUBMIT_DIR}"
 
 JOB_DIR="${PROJECT_ROOT}/jobs"
-mkdir -p "${JOB_DIR}" # just to make sure
 
 # determine job/task identity (array optional)
 if [[ -n "${SLURM_ARRAY_JOB_ID:-}" && -n "${SLURM_ARRAY_TASK_ID:-}" ]]; then
@@ -113,22 +112,13 @@ else
 fi
 
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
-mkdir -p "${JOB_ROOT}" # just to make sure
-
-# take control over where output goes 
-BOOTSTRAP_STDOUT="${JOB_ROOT}/bootstrap.stdout.log"
-BOOTSTRAP_STDERR="${JOB_ROOT}/bootstrap.stderr.log"
-exec 8>>"${BOOTSTRAP_STDOUT}"
-exec 9>>"${BOOTSTRAP_STDERR}"
-BOOTSTRAP_FD_OUT=8
-BOOTSTRAP_FD_ERR=9
 
 # per job
 JOB_PROVENANCE_DIR="${JOB_ROOT}/provenance"
 JOB_SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
 
-RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 # per task
+RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 TASK_PROVENANCE_DIR="${RUN_DIR}/provenance"
 RESULT_DIR="${RUN_DIR}/results"
 
@@ -138,13 +128,16 @@ mkdir -p \
   "${JOB_SNAPSHOT_DIR}" \
   "${TASK_PROVENANCE_DIR}" \
   "${RESULT_DIR}"
-
-# convenience link: jobs/lastjob to jobs/<JOB_ID>
+# convenience symlink: jobs/lastjob to jobs/<JOB_ID>
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
-# ------------------------------------------------------------------------------
-# provenance files
-# ------------------------------------------------------------------------------
+# take control over where output goes 
+BOOTSTRAP_STDOUT="${JOB_ROOT}/bootstrap.stdout.log"
+BOOTSTRAP_STDERR="${JOB_ROOT}/bootstrap.stderr.log"
+exec 8>>"${BOOTSTRAP_STDOUT}"
+exec 9>>"${BOOTSTRAP_STDERR}"
+BOOTSTRAP_FD_OUT=8
+BOOTSTRAP_FD_ERR=9
 
 PLATFORM_FILE="${JOB_PROVENANCE_DIR}/platform.txt"   # once per job
 JOB_FILE="${JOB_PROVENANCE_DIR}/job.txt"             # ... 
@@ -304,7 +297,7 @@ if ( set -o noclobber; : >"${JOB_LOCK}" ) 2>/dev/null; then
     echo "Kernel: $(uname -srm)"
     if [[ -r /etc/os-release ]]; then
       . /etc/os-release
-      echo "Operating system: ${PRETTY_NAME}"
+      echo "Distribution: ${PRETTY_NAME}"
     fi
   } >"${PLATFORM_FILE}"
 

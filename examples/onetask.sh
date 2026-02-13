@@ -73,7 +73,12 @@ RESULT_DIR="${RUN_DIR}/results"
 PROVENANCE_DIR="${RUN_DIR}/provenance"
 SNAPSHOT_DIR="${RUN_DIR}/snapshots"
 
-mkdir -p "${RESULT_DIR}" "${PROVENANCE_DIR}" "${SNAPSHOT_DIR}"
+mkdir -p \
+  "${RUN_DIR}" \
+  "${SNAPSHOT_DIR}" \
+  "${PROVENANCE_DIR}" \
+  "${RESULT_DIR}"
+# convenience symlink: jobs/lastjob to jobs/<JOB_ID>
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
 # bootstrap/payload logs in job dir
@@ -223,10 +228,11 @@ blog_step "capture provenance"
   echo "Time: $(date -Is)"
   echo "Node: $(hostname)"
   echo "Arch: $(uname -m)"
-  echo "Kernel: $(uname -srm)"
-  if [[ -r /etc/os-release ]]; then . /etc/os-release; echo "Operating system: ${PRETTY_NAME}"; fi
-} >"${PLATFORM_FILE}"
-
+  echo "Kernel: $(uname -srm)" 
+  if [[ -r /etc/os-release ]]; then 
+    . /etc/os-release 
+    echo "Distribution: ${PRETTY_NAME}"
+  fi
 {
   echo "Time: $(date -Is)"
   if command -v scontrol >/dev/null 2>&1; then

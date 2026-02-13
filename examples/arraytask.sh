@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#SBATCH --job-name=combitask
+#SBATCH --job-name=arraytask
 #SBATCH --time=00:02:00
 #SBATCH --mem=200M
 #SBATCH --nodes=1
@@ -50,7 +50,7 @@ MODULES=(
 
 # snapshot: if non-empty, saves a copy once per job (relative to PROJECT_ROOT)
 SNAPSHOT_ITEMS=(
-  # "combitask.sh"  # script file (optional; execution code saved anyway)
+  # "arraytask.sh"  # script file (optional; execution code saved anyway)
   "R"              # important: don't use "dir/", use "dir"
   "stan"           # directory
   # "config/settings.yaml" # file
@@ -100,7 +100,7 @@ TASK_ID="${SLURM_ARRAY_TASK_ID}"
 JOB_DIR="${PROJECT_ROOT}/jobs"
 JOB_ROOT="${JOB_DIR}/${JOB_ID}"
 
-# per job
+# per task
 RUN_DIR="${JOB_ROOT}/a${TASK_ID}"
 JOB_PROVENANCE_DIR="${JOB_ROOT}/provenance"
 JOB_SNAPSHOT_DIR="${JOB_ROOT}/snapshots"
@@ -115,7 +115,6 @@ mkdir -p \
   "${JOB_SNAPSHOT_DIR}" \
   "${TASK_PROVENANCE_DIR}" \
   "${RESULT_DIR}"
-
 # convenience link: jobs/lastjob to jobs/<JOB_ID>
 ln -sfn "$(basename "${JOB_ROOT}")" "${JOB_DIR}/lastjob"
 
@@ -290,7 +289,7 @@ if ( set -o noclobber; : >"${JOB_LOCK}" ) 2>/dev/null; then
     echo "Kernel: $(uname -srm)"
     if [[ -r /etc/os-release ]]; then
       . /etc/os-release
-      echo "Operating system: ${PRETTY_NAME}"
+      echo "Distribution: ${PRETTY_NAME}"
     fi
   } >"${PLATFORM_FILE}"
 
