@@ -233,6 +233,8 @@ blog_step "capture provenance"
     . /etc/os-release 
     echo "Distribution: ${PRETTY_NAME}"
   fi
+} > "${PLATFORM_FILE}"
+
 {
   echo "Time: $(date -Is)"
   if command -v scontrol >/dev/null 2>&1; then
@@ -241,6 +243,7 @@ blog_step "capture provenance"
     env | grep '^SLURM_' | sort || true
   fi
 } > "${JOB_FILE}"
+
 {
   echo "Start time: $(date -Is)"
   echo "Project name: ${PROJECT_NAME}"
@@ -252,6 +255,7 @@ blog_step "capture provenance"
   echo "Job root: ${JOB_ROOT}"
   echo "Run directory: ${RUN_DIR}"
 } >"${RUN_FILE}"
+
 {
   if command -v module >/dev/null 2>&1; then
     module -t list 2>&1
