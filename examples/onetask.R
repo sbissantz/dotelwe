@@ -125,7 +125,7 @@ log("STEP", "start analysis")
 ### --- input(s) ---
 
 #inputs <- c("bfi_jk25a.rda", "Qarr_bfi_jk25a.rda")
-#lapply(file.path(data_dir, inputs), load)
+#lapply(file.path(data_dir, inputs), load, envir = .GlobalEnv)
 
 ## input constraints (resolve later) 
 
@@ -207,9 +207,9 @@ log("STEP", "start analysis")
 
 ### --- model fitting ---
 
-## compile model
 #mdl_md2polsi <- cmdstanr::cmdstan_model(
   #file.path(stan_dir, "md2pol_si_cholesky.stan"),
+  #cpp_options = list(stan_threads = TRUE),
   #pedantic = TRUE
 #)
 

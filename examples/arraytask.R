@@ -132,7 +132,7 @@ fit_path <- file.path(
 log("INFO", sprintf("output: %s", fit_path))
 
 # ---- your analysis code goes here ----
-# Only differences from onetask.R should be:
+# only differences from onetask.R should be:
 #   - use task_id where needed
 #   - ensure filenames include task_id
 #   - optionally map task_id -> model/data variant
